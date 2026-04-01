@@ -1,33 +1,36 @@
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useApp } from "../context/AppContext";
+import { useDispatch, useSelector } from "react-redux";
+import {
+  setOrderDetail,
+  updateOrderField,
+  addRemark,
+  removeRemark,
+  updateItemQty,
+  toggleItemDeliver,
+  toggleBumAllDeliver,
+} from "../redux/Slices/orderSlice";
+import useOrders from "../hooks/useOrders";
 import StatusBadge from "../components/StatusBadge";
 import {
-  ChevronDown, ChevronRight, X, Plus, Settings, Eye,
-  Paperclip, Copy, Printer, Mail, CheckCircle2, XCircle,
-  ArrowRight, Check, ChevronUp, MoreHorizontal, Search,
-  Package, SlidersHorizontal,
+  X, Plus, Settings, Eye, Paperclip, Copy, Printer,
+  Mail, CheckCircle2, XCircle, Check,
+  MoreHorizontal, Search, ChevronDown, ChevronRight,
 } from "lucide-react";
 
-// ── Multi-select BUM Dropdown ─────────────────────────────────────────────────
+function PersonIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-500">
+      <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+    </svg>
+  );
+}
+
+// ─── BUM multi-select dropdown ────────────────────────────────────────────────
 function BumDropdown({ bums, selectedIds, onChange }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const ref = useRef(null);
-
-  const filtered = bums.filter(
-    (b) =>
-      !search.trim() ||
-      b.name.toLowerCase().includes(search.toLowerCase()) ||
-      b.code.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const toggle = (id) =>
-    onChange(
-      selectedIds.includes(id)
-        ? selectedIds.filter((s) => s !== id)
-        : [...selectedIds, id]
-    );
 
   useEffect(() => {
     const handler = (e) => {
@@ -37,56 +40,59 @@ function BumDropdown({ bums, selectedIds, onChange }) {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const selectedBums = bums.filter((b) => selectedIds.includes(b.id));
+  const filtered = bums.filter(
+    (b) => !search.trim() || b.bom_name?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const toggle = (id) =>
+    onChange(
+      selectedIds.includes(id)
+        ? selectedIds.filter((s) => s !== id)
+        : [...selectedIds, id]
+    );
+
+  const selectedBums = bums.filter((b) => selectedIds.includes(b.bom_id));
 
   return (
-    <div ref={ref} className="relative w-full">
-      {/* Trigger */}
+    <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((p) => !p)}
-        className="w-full flex items-center justify-between border border-gray-300 rounded-xl px-3 py-2 bg-white hover:border-violet-400 transition-colors shadow-sm"
+        className="flex items-center gap-2 min-w-[220px] max-w-xs border border-gray-300 rounded px-3 py-1.5 bg-white hover:border-[#017e84] transition-colors text-left"
       >
         {selectedIds.length === 0 ? (
-          <span className="text-xs text-gray-400">Select BUM group(s)…</span>
+          <span className="text-xs text-gray-400 flex-1">Select BOM group(s)…</span>
         ) : (
-          <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
-            {selectedBums.slice(0, 4).map((b) => (
-              <span key={b.id} className="inline-flex items-center gap-1 bg-violet-100 text-violet-700 text-xs font-semibold px-2 py-0.5 rounded-md">
-                {b.code}
-                <button
-                  onClick={(e) => { e.stopPropagation(); toggle(b.id); }}
-                  className="hover:text-red-500 leading-none"
-                >
+          <div className="flex items-center gap-1.5 flex-1 min-w-0 flex-wrap">
+            {selectedBums.slice(0, 3).map((b) => (
+              <span key={b.bom_id} className="inline-flex items-center gap-1 bg-[#e8f5f5] text-[#017e84] text-xs font-semibold px-2 py-0.5 rounded">
+                {b.bom_name}
+                <button onClick={(e) => { e.stopPropagation(); toggle(b.bom_id); }} className="hover:text-red-500 leading-none">
                   <X size={9} />
                 </button>
               </span>
             ))}
-            {selectedIds.length > 4 && (
-              <span className="text-xs text-gray-400">+{selectedIds.length - 4}</span>
-            )}
+            {selectedIds.length > 3 && <span className="text-xs text-gray-400">+{selectedIds.length - 3}</span>}
           </div>
         )}
-        <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+        <div className="flex items-center gap-1 flex-shrink-0">
           {selectedIds.length > 0 && (
-            <span className="text-xs bg-violet-600 text-white font-bold px-1.5 py-0.5 rounded-full leading-none">
+            <span className="text-xs bg-[#017e84] text-white font-bold px-1.5 py-0.5 rounded-full leading-none">
               {selectedIds.length}
             </span>
           )}
-          <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+          <ChevronDown size={13} className={`text-gray-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
         </div>
       </button>
 
-      {/* Dropdown panel */}
       {open && (
-        <div className="absolute z-30 w-full mt-1.5 bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden">
-          {/* Search + All/Clear */}
-          <div className="flex items-center gap-2 px-3 py-2.5 border-b border-gray-100 bg-gray-50">
+        <div className="absolute z-40 left-0 top-full mt-1 w-80 bg-white border border-gray-200 rounded shadow-xl overflow-hidden">
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 bg-gray-50">
             <Search size={12} className="text-gray-400 flex-shrink-0" />
             <input
               autoFocus
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search BUM groups…"
+              placeholder="Search BOM groups…"
               className="flex-1 text-xs bg-transparent focus:outline-none text-gray-700 placeholder-gray-400"
             />
             {search && (
@@ -95,38 +101,35 @@ function BumDropdown({ bums, selectedIds, onChange }) {
               </button>
             )}
             <div className="border-l border-gray-200 pl-2 flex items-center gap-2">
-              <button onClick={() => onChange(bums.map((b) => b.id))} className="text-xs text-violet-600 hover:text-violet-800 font-medium">All</button>
+              <button onClick={() => onChange(bums.map((b) => b.bom_id))} className="text-xs text-[#017e84] hover:underline font-medium">All</button>
               <button onClick={() => onChange([])} className="text-xs text-gray-400 hover:text-gray-600 font-medium">Clear</button>
             </div>
           </div>
 
-          {/* Options */}
-          <div className="max-h-64 overflow-y-auto">
-            {filtered.length === 0 && (
-              <p className="text-xs text-gray-400 px-4 py-4 text-center">No groups match "{search}"</p>
-            )}
+          <div className="max-h-60 overflow-y-auto">
+            {filtered.length === 0 && <p className="text-xs text-gray-400 px-4 py-4 text-center">No results</p>}
             {filtered.map((bum) => {
-              const isSel = selectedIds.includes(bum.id);
-              const deliverCnt = bum.items.filter((i) => i.deliver).length;
+              const isSel = selectedIds.includes(bum.bom_id);
+              const deliverCnt = (bum.items || []).filter((i) => i.deliver).length;
               return (
                 <button
-                  key={bum.id}
-                  onClick={() => toggle(bum.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-2.5 border-b border-gray-100 last:border-0 text-left transition-colors hover:bg-gray-50 ${isSel ? "bg-violet-50" : ""}`}
+                  key={bum.bom_id}
+                  onClick={() => toggle(bum.bom_id)}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 border-b border-gray-100 last:border-0 text-left transition-colors hover:bg-gray-50 ${isSel ? "bg-[#f0fafa]" : ""}`}
                 >
-                  <div className={`w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center transition-all ${isSel ? "bg-violet-600 border-violet-600" : "border-gray-300 bg-white"}`}>
+                  <div className={`w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center transition-all ${isSel ? "bg-[#017e84] border-[#017e84]" : "border-gray-300 bg-white"}`}>
                     {isSel && <Check size={9} strokeWidth={3} className="text-white" />}
                   </div>
-                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${isSel ? "bg-violet-600 text-white" : "bg-gray-100 text-gray-700"}`}>
-                    {bum.code || "—"}
+                  <div className={`w-7 h-7 rounded flex items-center justify-center text-xs font-bold flex-shrink-0 ${isSel ? "bg-[#017e84] text-white" : "bg-gray-100 text-gray-600"}`}>
+                    {bum.bom_name?.charAt(0)?.toUpperCase() || "B"}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-800 truncate">{bum.name}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">{bum.sub} · {bum.items.length} items</p>
+                    <p className="text-xs font-semibold text-gray-800 truncate">{bum.bom_name}</p>
+                    <p className="text-xs text-gray-400 mt-0.5 truncate">{(bum.items || []).length} items</p>
                   </div>
                   <div className="flex flex-col items-end gap-1 flex-shrink-0">
                     <StatusBadge status={bum.status} />
-                    {deliverCnt > 0 && <span className="text-xs text-green-600 font-medium">{deliverCnt} ✓</span>}
+                    {deliverCnt > 0 && <span className="text-xs text-green-600 font-medium">{deliverCnt}✓</span>}
                   </div>
                 </button>
               );
@@ -134,9 +137,9 @@ function BumDropdown({ bums, selectedIds, onChange }) {
           </div>
 
           {selectedIds.length > 0 && (
-            <div className="px-4 py-2 bg-violet-50 border-t border-violet-100 flex items-center justify-between">
-              <p className="text-xs text-violet-700 font-medium">{selectedIds.length} group{selectedIds.length > 1 ? "s" : ""} selected</p>
-              <button onClick={() => setOpen(false)} className="text-xs text-violet-600 font-semibold hover:text-violet-800">Done</button>
+            <div className="px-3 py-2 bg-[#f0fafa] border-t border-[#c8e6e8] flex items-center justify-between">
+              <p className="text-xs text-[#017e84] font-medium">{selectedIds.length} group{selectedIds.length > 1 ? "s" : ""} selected</p>
+              <button onClick={() => setOpen(false)} className="text-xs text-[#017e84] font-semibold hover:underline">Done</button>
             </div>
           )}
         </div>
@@ -145,424 +148,437 @@ function BumDropdown({ bums, selectedIds, onChange }) {
   );
 }
 
-// ── Item row ──────────────────────────────────────────────────────────────────
-function ItemRow({ item, bumId, orderId, dispatch }) {
-  const handleQty = (val) => {
-    const n = parseFloat(val);
-    if (!isNaN(n) && n >= 0)
-      dispatch({ type: "UPDATE_ITEM_QTY", orderId, bumId, itemId: item.id, qty: n });
+// ─── Item row ─────────────────────────────────────────────────────────────────
+function ItemRow({ item, bomId, isSplit = false, itemIndex }) {
+  const dispatch = useDispatch();
+  const [inputVal, setInputVal] = useState(String(item.qty));
+
+  // Keep local input in sync when Redux state changes
+  useEffect(() => { 
+    setInputVal(String(item.qty)); 
+  }, [item.qty]);
+
+  const handleBlur = () => {
+    const n = parseFloat(inputVal);
+    if (!isNaN(n) && n >= 0 && n !== item.qty) {
+      dispatch(updateItemQty({ bomId, itemIndex, qty: n }));
+    } else {
+      setInputVal(String(item.qty));
+    }
   };
-  const toggleDeliver = () =>
-    dispatch({ type: "TOGGLE_ITEM_DELIVER", orderId, bumId, itemId: item.id });
+
+  const handleToggleDeliver = () => {
+    console.log("🎯 Toggle deliver clicked for:", { 
+      product_name: item.product_name, 
+      product_id: item.product_id,
+      bomId, 
+      itemIndex,
+      currentDeliver: item.deliver 
+    });
+    
+    // Dispatch with both ID and index for maximum compatibility
+    dispatch(toggleItemDeliver({ 
+      bomId, 
+      itemId: item.product_id,
+      itemIndex 
+    }));
+  };
 
   return (
-    <tr className={`border-b border-gray-100 transition-colors ${item.deliver ? "bg-green-50 hover:bg-green-100" : "bg-white hover:bg-gray-50"}`}>
-      <td className="px-4 py-2.5 w-10">
-        <button onClick={toggleDeliver}
-          className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all mx-auto ${item.deliver ? "bg-green-500 border-green-500 text-white" : "border-gray-300 hover:border-green-400 bg-white"}`}>
-          {item.deliver && <Check size={10} strokeWidth={3} />}
-        </button>
-      </td>
-      <td className="px-3 py-2.5">
-        <p className="text-xs font-semibold text-gray-800">{item.name}</p>
-        {item.sub && item.sub !== item.name && (
-          <p className="text-xs text-gray-400 mt-0.5 max-w-sm truncate">{item.sub}</p>
-        )}
-      </td>
-      <td className="px-3 py-2.5 w-36">
-        <div className="flex items-center justify-center gap-1">
-          <button onClick={() => handleQty(Math.max(0, item.qty - 1))}
-            className="w-6 h-6 rounded border border-gray-200 flex items-center justify-center text-gray-400 hover:bg-gray-100 flex-shrink-0">
-            <ChevronDown size={11} />
-          </button>
-          <input type="number" value={item.qty} onChange={(e) => handleQty(e.target.value)}
-            className="w-14 text-center text-sm font-bold text-gray-800 border border-gray-200 rounded-lg px-1 py-1 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
-            min="0" step="0.5" />
-          <button onClick={() => handleQty(item.qty + 1)}
-            className="w-6 h-6 rounded border border-gray-200 flex items-center justify-center text-gray-400 hover:bg-gray-100 flex-shrink-0">
-            <ChevronUp size={11} />
-          </button>
+    <tr className={`border-b border-gray-100 group transition-colors ${item.deliver ? "bg-green-50" : isSplit ? "bg-orange-50/40" : "hover:bg-gray-50"}`}>
+      <td className="pl-10 pr-2 py-2 w-10">
+        <div className={`w-8 h-8 rounded border flex items-center justify-center flex-shrink-0 ${isSplit ? "border-orange-200 bg-orange-50" : "border-gray-200 bg-gray-50"}`}>
+          {isSplit ? (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="1.8">
+              <path d="M16 3h5v5M8 21H3v-5M21 3l-7 7M3 21l7-7"/>
+            </svg>
+          ) : (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5">
+              <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
+            </svg>
+          )}
         </div>
-      </td>
-      <td className="px-3 py-2.5 w-14 text-center text-xs text-gray-500 font-medium">{item.unit}</td>
-      <td className="px-3 py-2.5 w-36 text-right"><StatusBadge status={item.status} /></td>
-      <td className="px-3 py-2.5 w-28 text-center">
-        <button onClick={toggleDeliver}
-          className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${item.deliver ? "bg-green-500 text-white hover:bg-green-600 shadow-sm" : "bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-200"}`}>
-          {item.deliver ? "✓ Deliver" : "Mark"}
+        </td>
+      <td className="px-2 py-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-gray-900 leading-tight">{item.product_name}</p>
+            {item.article_no && item.article_no !== item.product_name && (
+              <p className="text-xs text-gray-500 leading-tight mt-0.5 truncate max-w-md">{item.article_no}</p>
+            )}
+          </div>
+          {isSplit && (
+            <span className="inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded bg-orange-100 text-orange-600 whitespace-nowrap flex-shrink-0">
+              remaining
+            </span>
+          )}
+        </div>
+        </td>
+      <td className="px-3 py-2 w-24 text-right">
+        <input
+          type="number"
+          value={inputVal}
+          onChange={(e) => setInputVal(e.target.value)}
+          onBlur={handleBlur}
+          onKeyDown={(e) => e.key === "Enter" && e.target.blur()}
+          className="w-16 text-right text-sm text-gray-800 border-0 focus:outline-none focus:ring-1 focus:ring-[#017e84] rounded px-1 py-0.5 bg-transparent hover:bg-gray-100"
+          min="0" step="0.5"
+        />
+        </td>
+      <td className="px-3 py-2 w-16 text-xs text-gray-500 font-medium">{item.uom_name}</td>
+      <td className="px-3 py-2 w-40 text-right">
+        <StatusBadge status={item.status} />
+        </td>
+      <td className="px-3 py-2 w-12 text-center">
+        <button
+          onClick={handleToggleDeliver}
+          className={`w-5 h-5 flex items-center justify-center mx-auto transition-colors rounded ${
+            item.deliver
+              ? "text-green-600 bg-green-100"
+              : "text-gray-300 hover:text-gray-500 hover:bg-gray-100"
+          }`}
+        >
+          <Check size={14} strokeWidth={item.deliver ? 2.5 : 1.5} />
         </button>
-      </td>
-      <td className="px-3 py-2.5 w-8 text-right">
-        <button className="text-gray-300 hover:text-gray-500"><MoreHorizontal size={14} /></button>
-      </td>
+        </td>
+      <td className="px-2 py-2 w-8 text-right opacity-0 group-hover:opacity-100 transition-opacity">
+        <button className="text-gray-400 hover:text-gray-600"><MoreHorizontal size={14} /></button>
+        </td>
     </tr>
   );
 }
 
-// ── BUM Panel — one table per selected BUM ────────────────────────────────────
-function BumPanel({ bum, orderId, dispatch, navigate }) {
-  const [itemSearch, setItemSearch] = useState("");
-  const [itemFilter, setItemFilter] = useState("All");
-  const FILTERS = ["All", "Not Enough", "Waiting", "Blocked", "Available"];
+// ─── BUM section ──────────────────────────────────────────────────────────────
+function BumSection({ bum }) {
+  const dispatch = useDispatch();
+  const [collapsed, setCollapsed] = useState(false);
 
-  const matchFilter = (item) => {
-    if (itemFilter === "All")        return true;
-    if (itemFilter === "Blocked")    return item.status === "BLOCKED";
-    if (itemFilter === "Not Enough") return item.status === "NOT ENOUGH";
-    if (itemFilter === "Waiting")    return item.status === "WAITING";
-    if (itemFilter === "Available")  return !item.status || item.status === "ok";
-    return true;
+  const items = bum.items || [];
+  const deliverCnt = items.filter((i) => i.deliver).length;
+  const allDelivering = items.length > 0 && items.every((i) => i.deliver);
+
+  const handleToggleAll = () => {
+    console.log("🎯 Toggle all clicked for BOM:", bum.bom_name);
+    dispatch(toggleBumAllDeliver({ bomId: bum.bom_id }));
   };
 
-  const visibleItems = bum.items.filter(
-    (i) => matchFilter(i) && (
-      !itemSearch.trim() ||
-      i.name.toLowerCase().includes(itemSearch.toLowerCase()) ||
-      (i.sub || "").toLowerCase().includes(itemSearch.toLowerCase())
-    )
-  );
-
-  const allDelivering = bum.items.length > 0 && bum.items.every((i) => i.deliver);
-  const toggleAll = () => dispatch({ type: "TOGGLE_BUM_ALL_DELIVER", orderId, bumId: bum.id });
-
   return (
-    <div className={`rounded-xl border overflow-hidden mb-3 last:mb-0 ${bum.status === "BLOCKED" ? "border-red-200" : "border-gray-200"}`}>
-      {/* BUM header */}
-      <div className={`flex items-center gap-3 px-5 py-3 border-b ${
-        bum.status === "BLOCKED" ? "bg-red-50 border-red-200 border-l-4 border-l-red-400" :
-        bum.status === "START"   ? "bg-blue-50 border-blue-100 border-l-4 border-l-blue-400" :
-        "bg-gray-50 border-gray-100 border-l-4 border-l-transparent"
-      }`}>
-        <div className="w-8 h-8 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-xs font-bold text-gray-700 flex-shrink-0">
-          {bum.code}
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold text-gray-800">{bum.name}</p>
-          <p className="text-xs text-gray-400">{bum.sub} · {bum.items.length} items</p>
-        </div>
-        <StatusBadge status={bum.status} />
-        <button onClick={() => navigate(`/orders/${orderId}/bum/${bum.id}`)}
-          className="flex items-center gap-1.5 text-xs text-violet-600 hover:text-violet-800 font-medium bg-violet-50 hover:bg-violet-100 px-2.5 py-1.5 rounded-lg transition-colors ml-2">
-          Full page <ArrowRight size={11} />
-        </button>
-      </div>
-
-      {/* Search + filter */}
-      <div className="flex items-center gap-3 px-5 py-2.5 border-b border-gray-100 bg-white flex-wrap gap-y-2">
-        <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-1.5 bg-gray-50 flex-1 min-w-[160px] max-w-xs">
-          <Search size={12} className="text-gray-400 flex-shrink-0" />
-          <input value={itemSearch} onChange={(e) => setItemSearch(e.target.value)}
-            placeholder="Search items…"
-            className="flex-1 text-xs bg-transparent focus:outline-none text-gray-700 placeholder-gray-400" />
-          {itemSearch && <button onClick={() => setItemSearch("")} className="text-gray-400 hover:text-gray-600"><X size={11} /></button>}
-        </div>
-        <div className="flex gap-1 flex-wrap">
-          {FILTERS.map((f) => (
-            <button key={f} onClick={() => setItemFilter(f)}
-              className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${itemFilter === f ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
-              {f}
+    <>
+      <tr className={`border-b border-gray-200 ${bum.status === "BLOCKED" ? "bg-[#fff5f5]" : bum.status === "START" ? "bg-[#f0f9f9]" : "bg-white"}`}>
+        <td colSpan={7} className="py-0">
+          <div className={`flex items-center gap-3 px-4 py-2.5 border-l-4 ${bum.status === "BLOCKED" ? "border-l-[#e04c4c]" : bum.status === "START" ? "border-l-[#017e84]" : "border-l-gray-200"}`}>
+            <button onClick={() => setCollapsed((p) => !p)} className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0">
+              {collapsed ? <ChevronRight size={15} /> : <ChevronDown size={15} />}
             </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-3 ml-auto flex-shrink-0">
-          <span className="text-xs text-gray-400">{visibleItems.length} shown</span>
-          <button onClick={toggleAll}
-            className={`text-xs font-medium px-2.5 py-1 rounded-lg transition-colors border ${allDelivering ? "bg-green-500 text-white border-green-500 hover:bg-green-600" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
-            {allDelivering ? "✓ All selected" : "Select all"}
-          </button>
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[680px]">
-          <thead>
-            <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="w-10 px-4 py-2.5 text-center text-xs font-semibold text-gray-400 uppercase tracking-wide">✓</th>
-              <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Item</th>
-              <th className="text-center px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide w-36">Quantity</th>
-              <th className="text-center px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide w-14">Unit</th>
-              <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide w-36">Status</th>
-              <th className="text-center px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide w-28">Deliver</th>
-              <th className="w-8 px-3 py-2.5" />
-            </tr>
-          </thead>
-          <tbody>
-            {visibleItems.map((item) => (
-              <ItemRow key={item.id} item={item} bumId={bum.id} orderId={orderId} dispatch={dispatch} />
-            ))}
-            {visibleItems.length === 0 && (
-              <tr><td colSpan={7} className="text-center py-12 text-gray-400 text-sm">
-                {itemSearch || itemFilter !== "All" ? "No items match your search / filter" : "No items in this group"}
-              </td></tr>
+            <div className="w-9 h-9 rounded border border-gray-200 bg-white flex items-center justify-center flex-shrink-0">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5">
+                <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-gray-900 leading-tight">{bum.bom_name}</p>
+              {collapsed && (
+                <p className="text-xs text-gray-400 leading-tight">
+                  {items.length} items hidden
+                  {deliverCnt > 0 && <span className="text-green-600 ml-1">{deliverCnt}✓</span>}
+                </p>
+              )}
+            </div>
+            {deliverCnt > 0 && !collapsed && (
+              <span className="text-xs text-green-600 font-semibold bg-green-100 px-2 py-0.5 rounded-full">
+                {deliverCnt}/{items.length} ✓
+              </span>
             )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Footer */}
-      <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
-        <p className="text-xs text-gray-500">
-          {bum.items.filter((i) => i.deliver).length > 0
-            ? `${bum.items.filter((i) => i.deliver).length} items from this group marked for delivery`
-            : "Tick items to mark them for delivery"}
-        </p>
-        <button onClick={() => navigate(`/orders/${orderId}/bum/${bum.id}`)}
-          className="text-xs text-violet-600 hover:text-violet-800 font-medium flex items-center gap-1">
-          Open full BUM page <ArrowRight size={11} />
-        </button>
-      </div>
-    </div>
+            <StatusBadge status={bum.status} />
+            <button
+              onClick={handleToggleAll}
+              className={`text-xs px-2.5 py-1 rounded border font-medium ml-2 transition-colors ${
+                allDelivering ? "bg-green-500 text-white border-green-500" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+              }`}
+            >
+              {allDelivering ? "✓ All" : "Select all"}
+            </button>
+            <button className="text-gray-300 hover:text-gray-500 ml-1"><MoreHorizontal size={15} /></button>
+          </div>
+        </td>
+      </tr>
+      {!collapsed && items.map((item, idx) => (
+        <ItemRow
+          key={`${bum.bom_id}-${item.product_id ?? idx}`}
+          item={item}
+          bomId={bum.bom_id}
+          itemIndex={idx}
+        />
+      ))}
+    </>
   );
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
+// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function OrderDetailPage() {
   const { orderId } = useParams();
-  const navigate    = useNavigate();
-  const { state, dispatch } = useApp();
+  const navigate = useNavigate();
+  const dispatch = useDispatch();
+  const { getOrderById, loading } = useOrders();
 
-  const order = state.orders.find((o) => o.id === orderId);
+  const order = useSelector((s) => s.orders?.orderDetail);
 
-  const [location, setLocation]             = useState(order?.location || "Workshop");
-  const [addingRemark, setAddingRemark]     = useState(false);
-  const [remarkText, setRemarkText]         = useState("");
-  const [selectedBumIds, setSelectedBumIds] = useState(order?.bums[0]?.id ? [order.bums[0].id] : []);
-  const [tableOpen, setTableOpen]           = useState(true);
+  const [addingRemark, setAddingRemark] = useState(false);
+  const [remarkText, setRemarkText] = useState("");
+  const [showRawMaterials, setShowRawMaterials] = useState(false);
+  const [selectedbomIds, setSelectedbomIds] = useState([]);
+  const [projectNo, setProjectNo] = useState("");
 
-  if (!order) return <div className="p-8 text-gray-400">Order not found</div>;
+  const fetchOrder = useCallback(async () => {
+    const res = await getOrderById(orderId);
+    if (res?.success) {
+      dispatch(setOrderDetail(res.data));
+      setProjectNo(res.data?.project_id || "");
+      setSelectedbomIds((res.data?.boms || []).map((b) => b.bom_id));
+    }
+  }, [orderId, dispatch, getOrderById]);
 
-  const allItems     = order.bums.flatMap((b) => b.items);
-  const deliverCount = allItems.filter((i) => i.deliver).length;
-  const totalItems   = allItems.length;
-  const blockedBums  = order.bums.filter((b) => b.status === "BLOCKED").length;
-  const selectedBums = order.bums.filter((b) => selectedBumIds.includes(b.id));
+  useEffect(() => {
+    fetchOrder();
+  }, [fetchOrder]);
+
+  useEffect(() => {
+    if (order && selectedbomIds.length === 0 && order.boms) {
+      setSelectedbomIds(order.boms.map((b) => b.bom_id));
+    }
+  }, [order]);
 
   const handleAddRemark = () => {
-    if (remarkText.trim()) {
-      dispatch({ type: "ADD_REMARK", orderId: order.id, text: remarkText.trim() });
-      setRemarkText(""); setAddingRemark(false);
-    }
+    if (!remarkText.trim()) return;
+    dispatch(addRemark({ text: remarkText.trim() }));
+    setRemarkText("");
+    setAddingRemark(false);
   };
 
-  return (
-    <div className="flex flex-col h-full overflow-hidden">
+  const handleRemoveRemark = (index) => {
+    dispatch(removeRemark({ index }));
+  };
 
-      {/* ── Top action bar ── */}
-      <div className="bg-white border-b border-gray-200 px-5 py-2.5 flex items-center gap-3 flex-wrap flex-shrink-0">
-        <span className="text-sm font-bold text-blue-600">{order.id}</span>
-        <StatusBadge status={order.status} />
+  if (loading && !order) {
+    return <div className="p-8 text-gray-400 text-sm">Loading order…</div>;
+  }
+
+  if (!order) {
+    return <div className="p-8 text-gray-400 text-sm">Order not found</div>;
+  }
+
+  const boms = order.boms || [];
+  const visibleBums = boms.filter((b) => selectedbomIds.includes(b.bom_id));
+
+  const totalDeliverCount = boms.reduce(
+    (acc, bum) => acc + (bum.items || []).filter((i) => i.deliver).length,
+    0
+  );
+
+  const requisitionNo = order.requisition_no || `REQ-${order.id}`;
+  const requisitionDate = order.requisition_date || new Date().toLocaleDateString("en-GB", {
+    day: "2-digit", month: "short", year: "numeric",
+  });
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden bg-white">
+      {/* Top action bar */}
+      <div className="bg-white border-b border-gray-200 px-2 sm:px-4 py-1.5 flex items-center gap-0.5 flex-shrink-0 overflow-x-auto">
+        <button className="flex items-center gap-1.5 text-xs text-[#e04c4c] hover:bg-red-50 px-2.5 py-1.5 rounded transition-colors whitespace-nowrap">
+          <XCircle size={13} /> Cancel order
+        </button>
+        <div className="w-px h-4 bg-gray-200 mx-0.5 flex-shrink-0" />
+        <button className="flex items-center gap-1.5 text-xs text-gray-600 hover:bg-gray-100 px-2.5 py-1.5 rounded transition-colors whitespace-nowrap">
+          <Paperclip size={13} /> Attachments
+        </button>
+        <button className="flex items-center gap-1.5 text-xs text-gray-600 hover:bg-gray-100 px-2.5 py-1.5 rounded transition-colors whitespace-nowrap">
+          <Copy size={13} /> Copy
+        </button>
+        <button className="flex items-center gap-1.5 text-xs text-gray-600 hover:bg-gray-100 px-2.5 py-1.5 rounded transition-colors whitespace-nowrap">
+          <Printer size={13} /> Print <ChevronDown size={10} className="text-gray-400" />
+        </button>
+        <button className="flex items-center gap-1.5 text-xs text-gray-600 hover:bg-gray-100 px-2.5 py-1.5 rounded transition-colors whitespace-nowrap">
+          <Mail size={13} /> Email <ChevronDown size={10} className="text-gray-400" />
+        </button>
         <div className="flex-1" />
-        <button className="flex items-center gap-1.5 text-xs text-red-500 hover:text-red-700"><XCircle size={13} /> Cancel order</button>
-        <button className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700"><Paperclip size={13} /> Attachments</button>
-        <button className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700"><Copy size={13} /> Copy</button>
-        <button className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700"><Printer size={13} /> Print</button>
-        <button className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700"><Mail size={13} /> Email</button>
-        <div className="flex items-center gap-1.5 text-xs text-green-600 font-medium">
-          <CheckCircle2 size={13} className="text-green-500" /> Saved
+        <div className="flex items-center gap-1.5 text-xs text-green-600 font-medium pr-2 whitespace-nowrap">
+          <CheckCircle2 size={16} className="text-green-500" /> Saved
         </div>
       </div>
 
-      {/* ── Scrollable body ── */}
-      <div className="flex-1 overflow-y-auto p-5 space-y-4">
-
-        {/* ── Master info card ── */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-start gap-4">
-            <div className="w-16 h-16 rounded-xl bg-gray-100 flex items-center justify-center text-lg font-bold text-gray-600 flex-shrink-0">
-              {order.productCode}
+      {/* Scrollable body */}
+      <div className="flex-1 overflow-y-auto">
+        {/* Order header */}
+        <div className="px-4 sm:px-6 pt-5 pb-4 border-b border-gray-200">
+          <div className="flex items-start gap-3 sm:gap-4">
+            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded border border-gray-200 bg-gray-50 flex items-center justify-center flex-shrink-0">
+              <span className="text-base sm:text-lg font-bold text-gray-400">
+                {order.requisition_no?.slice(-4) || "MRN"}
+              </span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-blue-600 font-semibold text-sm">{order.id}</p>
-              <p className="text-xl font-bold text-gray-900 mt-0.5 leading-tight">{order.productName}</p>
-              <p className="text-xs text-gray-400 mt-1">{order.productSub}</p>
-              <button className="text-xs text-blue-500 mt-2 hover:underline">+ Set put away location</button>
+              <div className="mb-1"><StatusBadge status={order.status} /></div>
+              <p className="text-[#017e84] font-semibold text-sm cursor-pointer hover:underline">{order.id}</p>
+              <p className="text-base sm:text-lg font-semibold text-gray-900 leading-snug mt-0.5">{order.requisition_no}</p>
+              <p className="text-xs text-gray-500 mt-0.5">{order.project_name}</p>
+              <button className="text-xs text-[#017e84] mt-2 hover:underline">+ Set put away location</button>
             </div>
-            <div className="flex flex-col items-end gap-2 flex-shrink-0">
+            <div className="flex flex-col items-end gap-2 flex-shrink-0 text-right">
               <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                <div className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-xs">👤</div>
-                Assigned to
+                <PersonIcon /><span className="hidden sm:inline">Assigned to</span>
               </div>
-              <button className="px-3 py-1 border border-gray-200 rounded-full text-xs text-gray-600 hover:bg-gray-50">Not prioritized ★</button>
+              <button className="px-2 sm:px-3 py-1 border border-gray-300 rounded-full text-xs text-gray-600 hover:bg-gray-50 whitespace-nowrap">
+                Not prioritized ☆
+              </button>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-5 pt-4 border-t border-gray-100">
+          {/* Requisition fields */}
+          <div className="mt-5 pt-4 border-t border-gray-100 grid grid-cols-2 sm:grid-cols-4 gap-x-8 gap-y-4">
             <div>
-              <p className="text-xs text-gray-400 mb-1">Location</p>
-              <select value={location} onChange={(e) => setLocation(e.target.value)}
-                className="text-sm text-gray-800 bg-transparent border-0 p-0 focus:outline-none cursor-pointer font-medium">
-                <option>Workshop</option><option>Warehouse</option>
-                <option>Assembly</option><option>Production Floor</option>
-              </select>
+              <p className="text-xs text-gray-400 mb-0.5">Requisition No</p>
+              <p className="text-sm text-gray-500 italic">{requisitionNo}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-400 mb-1">Order date</p>
-              <p className="text-sm font-medium text-gray-800">{order.orderDate}</p>
+              <p className="text-xs text-gray-400 mb-0.5">Requisition Date</p>
+              <p className="text-sm text-gray-700">{requisitionDate}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-400 mb-1">Due date</p>
-              <input type="date" className="text-sm text-gray-600 bg-transparent border-0 p-0 focus:outline-none cursor-pointer" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-400 mb-1">Project No</p>
-              <p className="text-sm font-medium text-gray-800">{order.projectNo}</p>
+              <p className="text-xs text-gray-400 mb-0.5">Project No</p>
+              <div className="flex items-center gap-1 group cursor-pointer">
+                <input
+                  type="text"
+                  value={projectNo}
+                  onChange={(e) => {
+                    setProjectNo(e.target.value);
+                    dispatch(updateOrderField({ field: "project_id", value: e.target.value }));
+                  }}
+                  placeholder="Select project…"
+                  className="text-sm text-gray-800 bg-transparent focus:outline-none w-full placeholder-gray-300 border-b border-transparent focus:border-[#017e84] hover:border-gray-300 transition-colors pb-0.5"
+                />
+                <ChevronDown size={12} className="text-gray-300 flex-shrink-0 group-hover:text-gray-500 transition-colors" />
+              </div>
             </div>
           </div>
 
-          <button className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 mt-3">
+          <button className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 mt-3">
             <Settings size={12} /> Manage
           </button>
         </div>
 
-        {/* ── Remarks + BUM selector side by side ── */}
-        <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
-          <div className="flex items-start gap-4">
-
-            {/* LEFT: Remarks inline */}
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Remarks</p>
+        {/* Remarks + BOM selector */}
+        <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
+          <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-6">
+            <div className="flex-1 min-w-0 w-full">
+              <p className="text-sm font-semibold text-gray-800 mb-2">Remarks</p>
               <div className="flex items-center gap-2 flex-wrap">
-                {order.remarks.map((r, i) => (
-                  <div key={i} className="flex items-center gap-1.5 bg-yellow-50 border border-yellow-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-700">
-                    <span>{r}</span>
-                    <button onClick={() => dispatch({ type: "REMOVE_REMARK", orderId: order.id, index: i })}
-                      className="text-gray-300 hover:text-red-400 flex-shrink-0"><X size={10} /></button>
+                {(order.remarks || []).map((r, i) => (
+                  <div key={i} className="flex items-center gap-1.5 bg-yellow-50 border border-yellow-200 rounded px-2.5 py-1 text-xs text-gray-700">
+                    <span>{typeof r === 'string' ? r : r.text}</span>
+                    <button onClick={() => handleRemoveRemark(i)} className="text-gray-300 hover:text-red-400">
+                      <X size={10} />
+                    </button>
                   </div>
                 ))}
                 {addingRemark ? (
-                  <div className="flex items-center gap-1.5">
-                    <input autoFocus value={remarkText}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <input
+                      autoFocus
+                      value={remarkText}
                       onChange={(e) => setRemarkText(e.target.value)}
                       onKeyDown={(e) => e.key === "Enter" && handleAddRemark()}
                       placeholder="Type remark…"
-                      className="text-xs border border-gray-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400 w-44" />
-                    <button onClick={handleAddRemark} className="text-xs bg-blue-600 text-white px-2.5 py-1.5 rounded-lg hover:bg-blue-700">Add</button>
+                      className="text-xs border border-gray-300 rounded px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-[#017e84] w-44"
+                    />
+                    <button onClick={handleAddRemark} className="text-xs bg-[#017e84] text-white px-2.5 py-1 rounded hover:bg-[#015f64]">Add</button>
                     <button onClick={() => { setAddingRemark(false); setRemarkText(""); }} className="text-gray-400 hover:text-gray-600"><X size={13} /></button>
                   </div>
                 ) : (
-                  <button onClick={() => setAddingRemark(true)}
-                    className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-700">
+                  <button onClick={() => setAddingRemark(true)} className="flex items-center gap-1 text-xs text-[#017e84] hover:underline">
                     <Plus size={12} /> Add remarks
                   </button>
                 )}
               </div>
             </div>
 
-            {/* DIVIDER */}
-            <div className="w-px self-stretch bg-gray-200 flex-shrink-0" />
+            <div className="hidden sm:block w-px self-stretch bg-gray-200 flex-shrink-0" />
 
-            {/* RIGHT: BUM multi-select */}
-            <div className="w-[30vw] flex-shrink-0">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Component Group (BUM)</p>
-              <BumDropdown
-                bums={order.bums}
-                selectedIds={selectedBumIds}
-                onChange={setSelectedBumIds}
-              />
+            <div className="flex-shrink-0 w-full sm:w-[20vw]">
+              <p className="text-sm font-semibold text-gray-800 mb-2">Component Group (BOM)</p>
+              <BumDropdown bums={boms} selectedIds={selectedbomIds} onChange={setSelectedbomIds} />
             </div>
+          </div>
 
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mt-4">
+            <button
+              onClick={() => navigate(`/orders/${order.id}/pickup`)}
+              className="flex items-center gap-1.5 text-sm text-[#017e84] hover:underline"
+            >
+              <Eye size={14} /> View full pick list
+              {totalDeliverCount > 0 && (
+                <span className="ml-1 text-xs bg-[#017e84] text-white font-bold px-1.5 py-0.5 rounded-full leading-none">
+                  {totalDeliverCount}
+                </span>
+              )}
+            </button>
+            <button className="w-full sm:w-auto px-5 py-2 bg-[#e8a825] hover:bg-[#d4971f] text-white font-semibold text-sm rounded transition-colors">
+              Complete order
+            </button>
           </div>
         </div>
 
-        {/* ── Master Requisition Table ── */}
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-
-          {/* Section header */}
-          <div className="flex items-center gap-3 px-5 py-3.5 border-b border-gray-200 bg-white">
-            <button
-              onClick={() => setTableOpen((p) => !p)}
-              className="flex items-center gap-2 flex-1 min-w-0 text-left hover:opacity-80 transition-opacity"
-            >
-              {tableOpen
-                ? <ChevronDown size={16} className="text-gray-500 flex-shrink-0" />
-                : <ChevronRight size={16} className="text-gray-500 flex-shrink-0" />}
-              <div className="min-w-0">
-                <p className="text-sm font-bold text-gray-800">Master Requisition Table</p>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  {order.bums.length} BUM groups · {totalItems} total items
-                </p>
-              </div>
-            </button>
-
-            <div className="flex items-center gap-2 flex-shrink-0">
-              {blockedBums > 0 && (
-                <span className="text-xs bg-red-100 text-red-600 px-2.5 py-1 rounded-full font-medium">
-                  {blockedBums} blocked
-                </span>
-              )}
-              {deliverCount > 0 && (
-                <span className="text-xs bg-green-100 text-green-700 px-2.5 py-1 rounded-full font-medium">
-                  {deliverCount} for delivery
-                </span>
-              )}
+        {/* Overview section */}
+        <div className="px-4 sm:px-6 pt-4 pb-2">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-base font-semibold text-gray-800">Overview</p>
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <span>Show raw materials</span>
               <button
-                onClick={() => navigate(`/orders/${order.id}/pickup`)}
-                className="flex items-center gap-1.5 text-xs text-violet-600 hover:text-violet-800 font-medium bg-violet-50 hover:bg-violet-100 px-3 py-1.5 rounded-lg transition-colors"
+                onClick={() => setShowRawMaterials((p) => !p)}
+                className={`relative inline-flex w-9 h-5 rounded-full transition-colors ${showRawMaterials ? "bg-[#017e84]" : "bg-gray-200"}`}
               >
-                <Eye size={12} /> Pick-up List
+                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${showRawMaterials ? "translate-x-4" : "translate-x-0.5"}`} />
               </button>
             </div>
           </div>
 
-          {tableOpen && (
-            <div className="p-4 space-y-3">
-              {selectedBums.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-                  <Package size={36} className="mb-3 opacity-30" />
-                  <p className="text-sm">Select one or more BUM groups from the selector above</p>
-                </div>
-              ) : (
-                selectedBums.map((bum) => (
-                  <BumPanel key={bum.id} bum={bum} orderId={orderId} dispatch={dispatch} navigate={navigate} />
-                ))
-              )}
-            </div>
-          )}
+          <div className="border border-gray-200 rounded overflow-hidden overflow-x-auto">
+            {visibleBums.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-gray-400 select-none">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" className="mb-3">
+                  <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
+                </svg>
+                <p className="text-sm text-gray-500 text-center px-4">Select a component group to view its items</p>
+                <p className="text-xs text-gray-400 mt-1 text-center px-4">
+                  Use the <span className="font-medium text-gray-500">Component Group (BOM)</span> dropdown above
+                </p>
+              </div>
+            ) : (
+              <table className="w-full min-w-[600px]">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="w-10 pl-10 pr-2 py-2" />
+                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Component</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">Qty</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide w-16">Unit</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide w-40">Status</th>
+                    <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide w-12">Deliver</th>
+                    <th className="w-8" />
+                   </tr>
+                </thead>
+                <tbody>
+                  {visibleBums.map((bum) => (
+                    <BumSection key={bum.bom_id} bum={bum} />
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
 
-          {/* Collapsed footer strip */}
-          {!tableOpen && (
-            <div className="px-5 py-3 flex items-center gap-3 flex-wrap bg-gray-50">
-              {order.bums.map((bum) => (
-                <button
-                  key={bum.id}
-                  onClick={() => { setSelectedBumIds([bum.id]); setTableOpen(true); }}
-                  className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-violet-600 transition-colors"
-                >
-                  <span className="w-5 h-5 rounded bg-gray-200 flex items-center justify-center text-xs font-bold">{bum.code}</span>
-                  <span className="truncate max-w-[120px]">{bum.name.split(":")[1]?.trim() || bum.name}</span>
-                  {bum.items.filter(i => i.deliver).length > 0 && (
-                    <span className="text-green-600 font-bold">·{bum.items.filter(i => i.deliver).length}✓</span>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <button className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-700 px-1">
-          <Plus size={12} /> Add another finished product
-        </button>
-      </div>
-
-      {/* ── Bottom bar ── */}
-      <div className="bg-white border-t border-gray-200 px-5 py-3 flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate(`/orders/${order.id}/pickup`)}
-            className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-medium"
-          >
-            <Eye size={15} /> View Pick-up List
+          <button className="flex items-center gap-1 text-xs text-[#017e84] hover:underline mt-3 mb-6">
+            <Plus size={12} /> Add another finished product
           </button>
-          {deliverCount > 0 && (
-            <span className="text-xs bg-green-100 text-green-700 px-2.5 py-1 rounded-full font-medium">
-              {deliverCount} items for delivery
-            </span>
-          )}
         </div>
-        <button className="px-5 py-2 bg-amber-400 hover:bg-amber-500 text-white font-semibold text-sm rounded-lg transition-colors">
-          Complete order
-        </button>
       </div>
     </div>
   );
