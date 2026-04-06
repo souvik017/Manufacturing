@@ -85,8 +85,10 @@ const useHsn = () => {
 
     try {
       const response = await baseClient.put(
-        `${APIEndpoints.updateHsn}/${id}`,
-        payload
+        APIEndpoints.updateHsn,
+        {id : Number(id) ,
+           ...payload
+        }
       );
 
       if (response.data?.status === true) {
@@ -118,8 +120,7 @@ const useHsn = () => {
     setError(null);
 
     try {
-      const response = await baseClient.delete(
-        `${APIEndpoints.deleteHsn}/${id}`
+      const response = await baseClient.post(APIEndpoints.deleteHsn , {id : Number(id)}
       );
 
       if (response.data?.status === true) {

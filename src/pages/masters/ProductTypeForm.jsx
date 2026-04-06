@@ -1,33 +1,31 @@
-// pages/masters/ProductCategoryForm.jsx
+// pages/masters/ProductTypeForm.jsx
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import useProduct from "../../hooks/useProduct";
 
-export default function ProductCategoryForm() {
+export default function ProductTypeForm() {
   const navigate = useNavigate();
-  const { id } = useParams(); // present only on edit route
+  const { id } = useParams();
   const isEdit = Boolean(id);
 
-  const { getProductCategories, createProductCategory, updateProductCategory, loading } =
-    useProduct();
+  const { getProductTypes, createProductType, updateProductType, loading } = useProduct();
 
   const [name, setName] = useState("");
-  const [fetching, setFetching] = useState(isEdit); // separate flag for initial data load
+  const [fetching, setFetching] = useState(isEdit);
 
-  // ── Pre-fill form on edit ────────────────────────────────────
+  // ── Pre-fill on edit ─────────────────────────────────────────
   useEffect(() => {
     if (!isEdit) return;
     (async () => {
       setFetching(true);
-      const result = await getProductCategories();
+      const result = await getProductTypes();
       if (result.success) {
-        const cat = result.data.find((c) => String(c.id) === String(id));
-        if (cat) {
-          setName(cat.category_name);
+        const type = result.data.find((t) => String(t.id) === String(id));
+        if (type) {
+          setName(type.type_name ?? type.name ?? "");
         } else {
-          // Category not found — go back
-          navigate("/masters/productcategories");
+          navigate("/masters/producttypes");
         }
       }
       setFetching(false);
@@ -39,24 +37,25 @@ export default function ProductCategoryForm() {
     e.preventDefault();
     if (!name.trim()) return;
 
-    const payload = { category_name: name.trim() };
+    // Adjust the payload key to match what your API expects
+    const payload = { item_type_name: name.trim()  , status : 1 };
     let result;
 
     if (isEdit) {
-      result = await updateProductCategory(id, payload);
+      result = await updateProductType(id, payload);
     } else {
-      result = await createProductCategory(payload);
+      result = await createProductType(payload);
     }
 
     if (result.success) {
-      navigate("/masters/productcategories");
+      navigate("/masters/producttype");
     }
   };
 
   const inputClass =
     "w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#017e84] focus:border-[#017e84] transition disabled:bg-gray-100 disabled:cursor-not-allowed";
 
-  // ── Loading skeleton while fetching existing data ────────────
+  // ── Loading skeleton ─────────────────────────────────────────
   if (fetching) {
     return (
       <div className="p-4 sm:p-6 bg-gray-50 min-h-screen">
@@ -79,17 +78,17 @@ export default function ProductCategoryForm() {
         {/* Header */}
         <div className="border-b px-6 py-4">
           <h1 className="text-xl font-semibold text-gray-800">
-            {isEdit ? "Edit Product Category" : "Add Product Category"}
+            {isEdit ? "Edit Product Type" : "Add Product Type"}
           </h1>
         </div>
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            {/* Category Name */}
+            {/* Type Name */}
             <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-gray-600 mb-1">
-                Category Name <span className="text-red-500">*</span>
+                Type Name <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
@@ -98,7 +97,7 @@ export default function ProductCategoryForm() {
                 required
                 disabled={loading}
                 className={inputClass}
-                placeholder="Enter category name"
+                placeholder="Enter product type name"
               />
             </div>
           </div>
@@ -107,7 +106,7 @@ export default function ProductCategoryForm() {
           <div className="flex justify-end gap-3 pt-4 border-t">
             <button
               type="button"
-              onClick={() => navigate("/masters/productcategories")}
+              onClick={() => navigate("/masters/producttypes")}
               disabled={loading}
               className="px-4 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50 transition"
             >
@@ -119,7 +118,7 @@ export default function ProductCategoryForm() {
               className="px-5 py-2 text-sm bg-[#017e84] text-white rounded-md hover:bg-[#01656a] shadow-sm disabled:opacity-60 disabled:cursor-not-allowed transition flex items-center gap-2"
             >
               {loading && <Loader2 size={14} className="animate-spin" />}
-              {isEdit ? "Update Category" : "Save Category"}
+              {isEdit ? "Update Type" : "Save Type"}
             </button>
           </div>
         </form>

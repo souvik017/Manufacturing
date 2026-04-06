@@ -1,42 +1,60 @@
-// pages/masters/PartnerList.jsx
-import { useState, useEffect } from "react";
+// pages/masters/HsnList.jsx
+import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { Plus, Edit, Trash2, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
-import usePartner from "../../hooks/usePartner";
+import { Plus, Edit, Trash2, RefreshCw, ChevronLeft, ChevronRight, Search, X } from "lucide-react";
+import useHsn from "../../hooks/useHsn";
 
 const PAGE_SIZE = 10;
 
-export default function PartnerList() {
-  const [partners, setPartners] = useState([]);
+export default function HsnList() {
+  const [hsns, setHsns] = useState([]);
+  const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const { getPartners, deletePartner, loading } = usePartner();
+  const { getHsns, deleteHsn, loading } = useHsn();
 
-  const fetchPartners = async () => {
-    const result = await getPartners();
+  const fetchHsns = async () => {
+    const result = await getHsns();
     if (result.success) {
-      setPartners(result.data);
+      setHsns(result.data);
       setCurrentPage(1);
     }
   };
 
   useEffect(() => {
-    fetchPartners();
+    fetchHsns();
   }, []);
 
   const handleDelete = async (id) => {
-    if (window.confirm("Delete this partner?")) {
-      const result = await deletePartner(id);
+    if (window.confirm("Are you sure you want to delete this HSN code?")) {
+      const result = await deleteHsn(id);
       if (result.success) {
-        setPartners((prev) => prev.filter((p) => p.id !== id));
+        setHsns((prev) => prev.filter((h) => h.id !== id));
       }
     }
   };
 
+  const handleSearchChange = (e) => {
+    setSearch(e.target.value);
+    setCurrentPage(1);
+  };
+
+  const clearSearch = () => {
+    setSearch("");
+    setCurrentPage(1);
+  };
+
+  // ── Client-side search filter ────────────────────────────────
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return hsns;
+    return hsns.filter((h) => h.hsn_code?.toLowerCase().includes(q));
+  }, [hsns, search]);
+
   // ── Pagination ───────────────────────────────────────────────
-  const totalPages = Math.max(1, Math.ceil(partners.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(currentPage, totalPages);
   const startIndex = (safePage - 1) * PAGE_SIZE;
-  const paginated = partners.slice(startIndex, startIndex + PAGE_SIZE);
+  const paginated = filtered.slice(startIndex, startIndex + PAGE_SIZE);
 
   const goToPage = (page) => {
     if (page >= 1 && page <= totalPages) setCurrentPage(page);
@@ -58,18 +76,19 @@ export default function PartnerList() {
   return (
     <div className="p-6">
       {/* ── Header ── */}
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex justify-between items-start mb-4 gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-800">Partners</h1>
-          {!loading && partners.length > 0 && (
+          <h1 className="text-2xl font-semibold text-gray-800">HSN Codes</h1>
+          {!loading && hsns.length > 0 && (
             <p className="text-sm text-gray-400 mt-0.5">
-              {partners.length} {partners.length === 1 ? "partner" : "partners"} total
+              {filtered.length} of {hsns.length} {hsns.length === 1 ? "code" : "codes"}
+              {search && " matched"}
             </p>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={fetchPartners}
+            onClick={fetchHsns}
             disabled={loading}
             title="Refresh"
             className="border border-gray-300 text-gray-600 px-3 py-2 rounded-md flex items-center gap-2 hover:bg-gray-50 disabled:opacity-50 transition"
@@ -77,12 +96,32 @@ export default function PartnerList() {
             <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
           </button>
           <Link
-            to="/masters/partners/add"
+            to="/masters/hsnlist/add"
             className="bg-[#017e84] text-white px-4 py-2 rounded-md flex items-center gap-2 hover:bg-[#015f64] transition"
           >
-            <Plus size={18} /> Add Partner
+            <Plus size={18} /> Add HSN
           </Link>
         </div>
+      </div>
+
+      {/* ── Search Bar ── */}
+      <div className="mb-4 relative max-w-sm">
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+        <input
+          type="text"
+          value={search}
+          onChange={handleSearchChange}
+          placeholder="Search HSN code..."
+          className="w-full pl-9 pr-9 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#017e84] focus:border-[#017e84] transition"
+        />
+        {search && (
+          <button
+            onClick={clearSearch}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+          >
+            <X size={14} />
+          </button>
+        )}
       </div>
 
       {/* ── Table ── */}
@@ -94,10 +133,7 @@ export default function PartnerList() {
                 #
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Partner Code
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Partner Name
+                HSN Code
               </th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Actions
@@ -105,18 +141,15 @@ export default function PartnerList() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {/* Skeleton */}
-            {loading && partners.length === 0 ? (
+            {/* Loading skeleton */}
+            {loading && hsns.length === 0 ? (
               Array.from({ length: PAGE_SIZE }).map((_, i) => (
                 <tr key={i} className="animate-pulse">
                   <td className="px-6 py-4">
                     <div className="h-4 bg-gray-200 rounded w-6" />
                   </td>
                   <td className="px-6 py-4">
-                    <div className="h-4 bg-gray-200 rounded w-24" />
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="h-4 bg-gray-200 rounded w-40" />
+                    <div className="h-4 bg-gray-200 rounded w-32" />
                   </td>
                   <td className="px-6 py-4 flex justify-end gap-3">
                     <div className="h-4 bg-gray-200 rounded w-8" />
@@ -124,34 +157,33 @@ export default function PartnerList() {
                   </td>
                 </tr>
               ))
-            ) : partners.length === 0 ? (
+            ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan="4" className="px-6 py-12 text-center text-gray-500">
-                  No partners found. Click "Add Partner" to create one.
+                <td colSpan="3" className="px-6 py-12 text-center text-gray-500">
+                  {search
+                    ? `No HSN codes found matching "${search}".`
+                    : `No HSN codes found. Click "Add HSN" to create one.`}
                 </td>
               </tr>
             ) : (
-              paginated.map((partner, index) => (
-                <tr key={partner.id} className="hover:bg-gray-50 transition-colors">
+              paginated.map((hsn, index) => (
+                <tr key={hsn.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-6 py-4 text-sm text-gray-400">
                     {startIndex + index + 1}
                   </td>
-                  <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                    {partner.partner_code}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-900">
-                    {partner.partner_name}
+                  <td className="px-6 py-4 text-sm font-medium text-gray-900 font-mono tracking-wide">
+                    {hsn.hsn_code}
                   </td>
                   <td className="px-6 py-4 text-right text-sm">
                     <Link
-                      to={`/masters/partners/edit/${partner.id}`}
+                      to={`/masters/hsnlist/edit/${hsn.id}`}
                       className="inline-flex items-center text-blue-600 hover:text-blue-800 mr-3 transition"
                       title="Edit"
                     >
                       <Edit size={16} />
                     </Link>
                     <button
-                      onClick={() => handleDelete(partner.id)}
+                      onClick={() => handleDelete(hsn.id)}
                       disabled={loading}
                       title="Delete"
                       className="inline-flex items-center text-red-600 hover:text-red-800 disabled:opacity-40 transition"
@@ -167,11 +199,11 @@ export default function PartnerList() {
       </div>
 
       {/* ── Pagination ── */}
-      {!loading && partners.length > PAGE_SIZE && (
+      {!loading && filtered.length > PAGE_SIZE && (
         <div className="flex items-center justify-between mt-4 px-1 flex-wrap gap-3">
           <p className="text-sm text-gray-500">
-            Showing {startIndex + 1}–{Math.min(startIndex + PAGE_SIZE, partners.length)} of{" "}
-            {partners.length}
+            Showing {startIndex + 1}–{Math.min(startIndex + PAGE_SIZE, filtered.length)} of{" "}
+            {filtered.length}
           </p>
           <div className="flex items-center gap-1">
             <button

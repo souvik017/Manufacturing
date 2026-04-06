@@ -1,42 +1,44 @@
-// pages/masters/PartnerList.jsx
+// pages/masters/ProductTypeList.jsx
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Plus, Edit, Trash2, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
-import usePartner from "../../hooks/usePartner";
+import useProduct from "../../hooks/useProduct";
+import { formatDate } from "../../utils/FormatDate";
+
 
 const PAGE_SIZE = 10;
 
-export default function PartnerList() {
-  const [partners, setPartners] = useState([]);
+export default function ProductTypeList() {
+  const [types, setTypes] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const { getPartners, deletePartner, loading } = usePartner();
+  const { getProductTypes, deleteProductType, loading } = useProduct();
 
-  const fetchPartners = async () => {
-    const result = await getPartners();
+  const fetchTypes = async () => {
+    const result = await getProductTypes();
     if (result.success) {
-      setPartners(result.data);
+      setTypes(result.data);
       setCurrentPage(1);
     }
   };
 
   useEffect(() => {
-    fetchPartners();
+    fetchTypes();
   }, []);
 
   const handleDelete = async (id) => {
-    if (window.confirm("Delete this partner?")) {
-      const result = await deletePartner(id);
+    if (window.confirm("Are you sure you want to delete this product type?")) {
+      const result = await deleteProductType(id);
       if (result.success) {
-        setPartners((prev) => prev.filter((p) => p.id !== id));
+        setTypes((prev) => prev.filter((t) => t.id !== id));
       }
     }
   };
 
   // ── Pagination ───────────────────────────────────────────────
-  const totalPages = Math.max(1, Math.ceil(partners.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(types.length / PAGE_SIZE));
   const safePage = Math.min(currentPage, totalPages);
   const startIndex = (safePage - 1) * PAGE_SIZE;
-  const paginated = partners.slice(startIndex, startIndex + PAGE_SIZE);
+  const paginatedTypes = types.slice(startIndex, startIndex + PAGE_SIZE);
 
   const goToPage = (page) => {
     if (page >= 1 && page <= totalPages) setCurrentPage(page);
@@ -60,16 +62,16 @@ export default function PartnerList() {
       {/* ── Header ── */}
       <div className="flex justify-between items-center mb-4">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-800">Partners</h1>
-          {!loading && partners.length > 0 && (
+          <h1 className="text-2xl font-semibold text-gray-800">Product Types</h1>
+          {!loading && types.length > 0 && (
             <p className="text-sm text-gray-400 mt-0.5">
-              {partners.length} {partners.length === 1 ? "partner" : "partners"} total
+              {types.length} {types.length === 1 ? "type" : "types"} total
             </p>
           )}
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={fetchPartners}
+            onClick={fetchTypes}
             disabled={loading}
             title="Refresh"
             className="border border-gray-300 text-gray-600 px-3 py-2 rounded-md flex items-center gap-2 hover:bg-gray-50 disabled:opacity-50 transition"
@@ -77,10 +79,10 @@ export default function PartnerList() {
             <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
           </button>
           <Link
-            to="/masters/partners/add"
+            to="/masters/producttype/add"
             className="bg-[#017e84] text-white px-4 py-2 rounded-md flex items-center gap-2 hover:bg-[#015f64] transition"
           >
-            <Plus size={18} /> Add Partner
+            <Plus size={18} /> Add Type
           </Link>
         </div>
       </div>
@@ -91,13 +93,13 @@ export default function PartnerList() {
           <thead className="bg-gray-50">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
-                #
+                Sl no
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Partner Code
+                Type Name
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Partner Name
+                Created At
               </th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Actions
@@ -105,18 +107,18 @@ export default function PartnerList() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {/* Skeleton */}
-            {loading && partners.length === 0 ? (
-              Array.from({ length: PAGE_SIZE }).map((_, i) => (
+            {/* Loading skeleton */}
+            {loading && types.length === 0 ? (
+              Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i} className="animate-pulse">
                   <td className="px-6 py-4">
                     <div className="h-4 bg-gray-200 rounded w-6" />
                   </td>
                   <td className="px-6 py-4">
-                    <div className="h-4 bg-gray-200 rounded w-24" />
+                    <div className="h-4 bg-gray-200 rounded w-40" />
                   </td>
                   <td className="px-6 py-4">
-                    <div className="h-4 bg-gray-200 rounded w-40" />
+                    <div className="h-4 bg-gray-200 rounded w-24" />
                   </td>
                   <td className="px-6 py-4 flex justify-end gap-3">
                     <div className="h-4 bg-gray-200 rounded w-8" />
@@ -124,34 +126,35 @@ export default function PartnerList() {
                   </td>
                 </tr>
               ))
-            ) : partners.length === 0 ? (
+            ) : types.length === 0 ? (
               <tr>
                 <td colSpan="4" className="px-6 py-12 text-center text-gray-500">
-                  No partners found. Click "Add Partner" to create one.
+                  No product types found. Click "Add Type" to create one.
                 </td>
               </tr>
             ) : (
-              paginated.map((partner, index) => (
-                <tr key={partner.id} className="hover:bg-gray-50 transition-colors">
+              paginatedTypes.map((type, index) => (
+                <tr key={type.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-6 py-4 text-sm text-gray-400">
                     {startIndex + index + 1}
                   </td>
                   <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                    {partner.partner_code}
+                    {/* adjust field name to match your API response */}
+                    {type.type_name || type.name || type.item_type_name}
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-900">
-                    {partner.partner_name}
+                  <td className="px-6 py-4 text-sm text-gray-500">
+                    {type.updated_at ? formatDate(type.updated_at) : "—"}
                   </td>
                   <td className="px-6 py-4 text-right text-sm">
                     <Link
-                      to={`/masters/partners/edit/${partner.id}`}
-                      className="inline-flex items-center text-blue-600 hover:text-blue-800 mr-3 transition"
+                      to={`/masters/producttype/edit/${type.id}`}
+                      className="inline-flex items-center text-blue-600 hover:text-blue-800 mr-3"
                       title="Edit"
                     >
                       <Edit size={16} />
                     </Link>
                     <button
-                      onClick={() => handleDelete(partner.id)}
+                      onClick={() => handleDelete(type.id)}
                       disabled={loading}
                       title="Delete"
                       className="inline-flex items-center text-red-600 hover:text-red-800 disabled:opacity-40 transition"
@@ -167,11 +170,11 @@ export default function PartnerList() {
       </div>
 
       {/* ── Pagination ── */}
-      {!loading && partners.length > PAGE_SIZE && (
-        <div className="flex items-center justify-between mt-4 px-1 flex-wrap gap-3">
+      {!loading && types.length > PAGE_SIZE && (
+        <div className="flex items-center justify-between mt-4 px-1">
           <p className="text-sm text-gray-500">
-            Showing {startIndex + 1}–{Math.min(startIndex + PAGE_SIZE, partners.length)} of{" "}
-            {partners.length}
+            Showing {startIndex + 1}–{Math.min(startIndex + PAGE_SIZE, types.length)} of{" "}
+            {types.length}
           </p>
           <div className="flex items-center gap-1">
             <button

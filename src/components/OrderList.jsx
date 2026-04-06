@@ -1,6 +1,16 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Search, SlidersHorizontal, Plus } from "lucide-react";
+import {
+  Search,
+  SlidersHorizontal,
+  Plus,
+  MoreVertical,
+  Edit,
+  Trash2,
+  Copy,
+  PanelLeftClose,
+  PanelLeftOpen,
+} from "lucide-react";
 import useOrders from "../hooks/useOrders";
 
 const STATUS_LABEL = {
@@ -20,35 +30,48 @@ export default function OrderList() {
   const { orderId } = useParams();
   const { getOrders, loading } = useOrders();
 
+  const [collapsed, setCollapsed] = useState(false);
   const [orders, setOrders] = useState([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
+  const [openMenuId, setOpenMenuId] = useState(null);
+  const menuRef = useRef(null);
   const debounceRef = useRef(null);
 
-  const fetchOrders = useCallback(async (requisition_no = "") => {
-    try {
-      const res = await getOrders({ requisition_no });
-
-      if (res?.success) {
-        // console.log(res.data.data.data)
-        const innerData = res.data.data;
-        setOrders(innerData?.data || []);
-        setTotal(innerData?.total || 0);
+  const fetchOrders = useCallback(
+    async (requisition_no = "") => {
+      try {
+        const res = await getOrders({ requisition_no });
+        if (res?.success) {
+          const innerData = res.data.data;
+          setOrders(innerData?.data || []);
+          setTotal(innerData?.total || 0);
+        }
+      } catch (err) {
+        console.error("Fetch orders error:", err);
       }
-    } catch (err) {
-      console.error("Fetch orders error:", err);
-    }
-  }, []);
+    },
+    [getOrders]
+  );
 
   useEffect(() => {
     fetchOrders();
-  }, [fetchOrders]);
+  }, []);
 
-  // Cleanup debounce on unmount
   useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   const handleSearchChange = (e) => {
@@ -60,9 +83,72 @@ export default function OrderList() {
     }, 400);
   };
 
-  return (
-    <div className="w-[300px] bg-white border-r border-gray-200 flex flex-col flex-shrink-0 h-full">
+  const handleEdit = (e, id) => {
+    e.stopPropagation();
+    setOpenMenuId(null);
+    navigate(`/orders/edit/${id}`);
+  };
 
+  const handleDelete = (e, id) => {
+    e.stopPropagation();
+    setOpenMenuId(null);
+    if (window.confirm("Are you sure you want to delete this order?")) {
+      console.log("Delete order", id);
+    }
+  };
+
+  const handleCopy = (e, order) => {
+    e.stopPropagation();
+    setOpenMenuId(null);
+    console.log("Copy order", order);
+  };
+
+  const toggleMenu = (e, id) => {
+    e.stopPropagation();
+    setOpenMenuId(openMenuId === id ? null : id);
+  };
+
+  /* ── Collapsed strip ── */
+  if (collapsed) {
+    return (
+      <div className="w-9 bg-white border-r border-gray-200 flex flex-col items-center py-2 gap-2 flex-shrink-0 h-full transition-all">
+        {/* Expand button */}
+        <button
+          onClick={() => setCollapsed(false)}
+          title="Show order list"
+          className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-500"
+        >
+          <PanelLeftOpen size={15} />
+        </button>
+
+        {/* Add button */}
+        <button
+          onClick={() => navigate("/requisitions/add")}
+          title="New order"
+          className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-500"
+        >
+          <Plus size={15} />
+        </button>
+
+        {/* Vertical label */}
+        <div className="flex-1 flex items-center justify-center">
+          <span
+            className="text-[10px] font-semibold text-gray-300 uppercase tracking-widest"
+            style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+          >
+            Requisitions
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── Full sidebar ── */
+  return (
+    <div
+      className="w-[300px] bg-white border-r border-gray-200 flex flex-col flex-shrink-0 h-full"
+      style={{ transition: "width 200ms ease" }}
+    >
       {/* Header */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-200 bg-white">
         <button className="w-8 h-8 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50">
@@ -76,10 +162,20 @@ export default function OrderList() {
         <div className="flex-1" />
 
         <button
-          onClick={() => navigate("/orders/add")}
+          onClick={() => navigate("/requisitions/add")}
+          title="New order"
           className="w-8 h-8 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50"
         >
           <Plus size={13} className="text-gray-500" />
+        </button>
+
+        {/* Collapse toggle */}
+        <button
+          onClick={() => setCollapsed(true)}
+          title="Hide order list"
+          className="w-8 h-8 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50"
+        >
+          <PanelLeftClose size={13} className="text-gray-500" />
         </button>
       </div>
 
@@ -87,7 +183,6 @@ export default function OrderList() {
       <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-gray-100 bg-gray-50">
         <SlidersHorizontal size={11} className="text-gray-400" />
         <span className="text-xs text-gray-400">Filters</span>
-
         {total > 0 && (
           <span className="ml-auto text-xs text-gray-400">{total} total</span>
         )}
@@ -127,13 +222,11 @@ export default function OrderList() {
             .flatMap((b) => b.items || [])
             .filter((i) => i.delivered).length;
 
-          const dotClass = STATUS_DOT[order.status] || "bg-gray-300";
-
           return (
             <div
               key={order.id}
-              onClick={() => navigate(`/orders/${order.id}`)}
-              className={`flex items-center gap-3 px-3 py-3 border-b border-gray-100 cursor-pointer transition-colors ${
+              onClick={() => navigate(`/requisitions/${order.id}`)}
+              className={`relative flex items-center gap-3 px-3 py-3 border-b border-gray-100 cursor-pointer transition-colors ${
                 isActive
                   ? "bg-[#e8f5f5] border-l-2 border-l-[#017e84]"
                   : "border-l-2 border-l-transparent hover:bg-gray-50"
@@ -149,12 +242,10 @@ export default function OrderList() {
                 <p className="text-xs font-semibold text-gray-800 truncate">
                   {order.requisition_no}
                 </p>
-
                 <p className="text-xs text-gray-400 mt-0.5">
                   {order.project_name ? `${order.project_name} · ` : ""}
                   {order.requisition_date}
                 </p>
-
                 {deliveredCount > 0 ? (
                   <span className="text-xs text-green-600 font-medium">
                     {deliveredCount} for delivery
@@ -166,8 +257,44 @@ export default function OrderList() {
                 ) : null}
               </div>
 
-              {/* Status Dot */}
-              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dotClass}`} />
+              {/* Three-dot menu */}
+              <div
+                className="relative"
+                ref={openMenuId === order.id ? menuRef : null}
+              >
+                <button
+                  onClick={(e) => toggleMenu(e, order.id)}
+                  className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 text-gray-500 flex-shrink-0"
+                >
+                  <MoreVertical size={14} />
+                </button>
+
+                {openMenuId === order.id && (
+                  <div className="absolute right-0 top-6 z-10 w-32 bg-white border border-gray-200 rounded-md shadow-lg py-1">
+                    <button
+                      onClick={(e) => handleEdit(e, order.id)}
+                      className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                    >
+                      <Edit size={12} />
+                      Edit
+                    </button>
+                    <button
+                      onClick={(e) => handleDelete(e, order.id)}
+                      className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-600 hover:bg-gray-50"
+                    >
+                      <Trash2 size={12} />
+                      Delete
+                    </button>
+                    <button
+                      onClick={(e) => handleCopy(e, order)}
+                      className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                    >
+                      <Copy size={12} />
+                      Copy
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           );
         })}

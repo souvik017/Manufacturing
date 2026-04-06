@@ -21,6 +21,10 @@ import BomList from "./pages/masters/bomList";
 import BomForm from "./pages/masters/bomAdd";
 import PartnerList from "./pages/masters/partnerList";
 import PartnerForm from "./pages/masters/partnerAdd";
+import ProductTypeList from "./pages/masters/ProductTypeList";
+import ProductTypeForm from "./pages/masters/ProductTypeForm";
+import HsnList from "./pages/masters/HsnList";
+import HsnForm from "./pages/masters/HsnForm";
 
 export default function App() {
   return (
@@ -30,11 +34,11 @@ export default function App() {
         <Route path="dashboard" element={<DashboardPage />} />
 
         {/* Orders section — all order routes share the OrderList sidebar */}
-        <Route path="orders" element={<OrdersLayout />}>
+        <Route path="requisitions" element={<OrdersLayout />}>
           <Route index element={<OrdersPage />} />
           <Route path="add" element={<OrderAddPage />} />
           <Route path=":orderId" element={<OrderDetailPage />} />
-          <Route path=":orderId/bum/:bumId" element={<BumDetailPage />} />
+          <Route path=":orderId/bom/:bumId" element={<BumDetailPage />} />
           <Route path=":orderId/pickup" element={<PickupListPage />} />
         </Route>
 
@@ -42,18 +46,33 @@ export default function App() {
               <Route path="products" element={<ProductList />} />
               <Route path="products/add" element={<ProductForm />} />
               <Route path="products/edit/:id" element={<ProductForm />} />
+
               <Route path="productcategories" element={<ProductCategoryList />} /> 
               <Route path="productcategories/add" element={<ProductCategoryForm />} />
+
+              <Route path="producttype" element={<ProductTypeList />} /> 
+              <Route path="producttype/add" element={<ProductTypeForm />} /> 
+              <Route path="producttype/edit/:id" element={<ProductTypeForm />} /> 
+
                <Route path="uomcategories" element={<UomCategoryList />} />
               <Route path="uomcategories/add" element={<UomCategoryForm />} />
+
               <Route path="manufacturers" element={<ManufacturerList />} />
               <Route path="manufacturers/add" element={<ManufacturerForm />} />
+              <Route path="manufacturers/edit/:id" element={<ManufacturerForm />} />
+
                <Route path="project" element={<ProjectNumberList />} />
               <Route path="project/add" element={<ProjectNumberForm />} />
+
                 <Route path="partners" element={<PartnerList />} />
                <Route path="partners/add" element={<PartnerForm />} />
+
              <Route path="bom" element={<BomList />} />
              <Route path="bom/add" element={<BomForm />} />
+
+             <Route path="hsnlist" element={<HsnList />} /> 
+             <Route path="hsnlist/add" element={<HsnForm />} />
+             <Route path="hsnlist/edit/:id" element={<HsnForm />} />  
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>

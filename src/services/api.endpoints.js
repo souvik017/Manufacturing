@@ -2,17 +2,25 @@ export const APIEndpoints = {
   logIn: "/login",
 
   getProducts: "/product/list",
-  getProductTypes: "/product/type/list",
-  getProductCategories: "/product/category/list",
+
+getProductTypes: "/product/type/list",
+createProductType: "/product/type/add",
+updateProductType: "/product/type/update",
+deleteProductType: "/product/type/delete",
+
+getProductCategories: "/product/category/list",
+createProductCategory: "/product/category/add",
+updateProductCategory: "/product/category/update",
+deleteProductCategory: "/product/category/delete",
 
   createProduct: "/product/add",
   updateProduct: "/product/update",    
   deleteProduct: "/product/delete",  
 
   getHsns: "/hsn/list",
-  createHsn: "/hsn",
-  updateHsn: "/hsn",
-  deleteHsn: "/hsn",  
+  createHsn: "/hsn/add",
+  updateHsn: "/hsn/update",
+  deleteHsn: "/hsn/delete",  
   
   getBoms: "/bom/list",
   createBom: "/bom/add",
@@ -25,5 +33,10 @@ export const APIEndpoints = {
 
   getPartners:"/partner/list",
   getProjects:"/project/list",
+
+  getManufactures:'/manufacturer/list',
+  createManufacture:'/manufacturer/add',
+  updateManufacture:'/manufacturer/update',
+  deleteManufacture:'/manufacturer/delete'
 };
 

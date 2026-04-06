@@ -16,13 +16,106 @@ import {
   X, Plus, Settings, Eye, Paperclip, Copy, Printer,
   Mail, CheckCircle2, XCircle, Check,
   MoreHorizontal, Search, ChevronDown, ChevronRight,
+  Download, ArrowLeftRight, FileText, FileSpreadsheet,
 } from "lucide-react";
+import { exportToExcel } from "../utils/ExportUtils";
+import { generatePickListPDF } from "../components/exportPickupList";
+import { formatDate } from "../utils/FormatDate";
 
 function PersonIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-500">
       <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
     </svg>
+  );
+}
+
+// ─── Export Dropdown ──────────────────────────────────────────────────────────
+function ExportDropdown({ order }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const handleExcelExport = () => {
+    exportToExcel(order);
+    setOpen(false);
+  };
+
+  const handlePDFExport = () => {
+    generatePickListPDF(order);
+    setOpen(false);
+  };
+
+  return (
+    <div ref={ref} className="relative">
+      {/* <button
+        onClick={() => setOpen((p) => !p)}
+        className="flex items-center gap-1.5 text-xs text-gray-600 hover:bg-gray-100 px-2.5 py-1.5 rounded transition-colors whitespace-nowrap"
+      >
+        <Download size={14} className="text-gray-500" />
+        Export
+        <ChevronDown size={10} className={`text-gray-400 transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-xl z-50 overflow-visible">
+          <div className="px-3 py-2 border-b border-gray-100 bg-gray-50">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Export As</p>
+          </div>
+          <button
+            onClick={handleExcelExport}
+            className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-gray-50 transition-colors border-b border-gray-100"
+          >
+            <div className="w-7 h-7 rounded bg-green-100 flex items-center justify-center flex-shrink-0">
+              <FileSpreadsheet size={14} className="text-green-600" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-gray-800">Excel (.xlsx)</p>
+              <p className="text-[10px] text-gray-400">Spreadsheet format</p>
+            </div>
+          </button>
+          <button
+            onClick={handlePDFExport}
+            className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-gray-50 transition-colors"
+          >
+            <div className="w-7 h-7 rounded bg-red-100 flex items-center justify-center flex-shrink-0">
+              <FileText size={14} className="text-red-500" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-gray-800">PDF (.pdf)</p>
+              <p className="text-[10px] text-gray-400">Pick list document</p>
+            </div>
+          </button>
+        </div>
+      )} */}
+
+      <div className="flex items-center gap-2">
+  {/* Excel Button */}
+  <button
+    onClick={handleExcelExport}
+    className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 rounded-lg transition-colors"
+  >
+    <FileSpreadsheet size={14} />
+    Excel
+  </button>
+
+  {/* PDF Button */}
+  <button
+    onClick={handlePDFExport}
+    className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-colors"
+  >
+    <FileText size={14} />
+    PDF
+  </button>
+</div>
+    </div>
   );
 }
 
@@ -148,91 +241,182 @@ function BumDropdown({ bums, selectedIds, onChange }) {
   );
 }
 
-// ─── Item row ─────────────────────────────────────────────────────────────────
-function ItemRow({ item, bomId, isSplit = false, itemIndex }) {
-  const dispatch = useDispatch();
-  const [inputVal, setInputVal] = useState(String(item.qty));
+// ─── Item 3-dot Dropdown ──────────────────────────────────────────────────────
+function ItemContextMenu({ item, bomId, itemIndex, allBoms, onSwap }) {
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState({ top: 0, left: 0 });
+  const ref = useRef(null);
 
-  // Keep local input in sync when Redux state changes
-  useEffect(() => { 
-    setInputVal(String(item.qty)); 
-  }, [item.qty]);
+  // Close on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
-  const handleBlur = () => {
-    const n = parseFloat(inputVal);
-    if (!isNaN(n) && n >= 0 && n !== item.qty) {
-      dispatch(updateItemQty({ bomId, itemIndex, qty: n }));
-    } else {
-      setInputVal(String(item.qty));
+  // Toggle dropdown with position
+  const handleToggle = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+
+    setPosition({
+      top: rect.bottom + window.scrollY + 4,
+      left: rect.right - 130, // adjust width
+    });
+
+    setOpen((prev) => !prev);
+  };
+
+  // Copy
+  const handleCopy = () => {
+    const text = `${item.product_name}${
+      item.article_no ? ` | ${item.article_no}` : ""
+    } | Qty: ${item.qty} ${item.uom_name || ""}`;
+
+    navigator.clipboard.writeText(text).catch(() => {});
+    setOpen(false);
+  };
+
+  // Simple swap
+  const handleSwap = () => {
+    if (!onSwap || !allBoms) return;
+
+    for (let bom of allBoms) {
+      for (let i = 0; i < (bom.items || []).length; i++) {
+        if (!(bom.bom_id === bomId && i === itemIndex)) {
+          onSwap({
+            bomId,
+            itemIndex,
+            targetBomId: bom.bom_id,
+            targetItemIndex: i,
+          });
+          setOpen(false);
+          return;
+        }
+      }
     }
   };
 
+  return (
+    <>
+      {/* Trigger */}
+      <div ref={ref} className="inline-block">
+        <button
+          onClick={handleToggle}
+          className="text-gray-400 hover:text-gray-600"
+        >
+          <MoreHorizontal size={14} />
+        </button>
+      </div>
+
+      {/* Dropdown (FIXED) */}
+      {open && (
+        <div
+          className="fixed w-32 bg-white border border-gray-200 rounded-md shadow-lg z-[9999]"
+          style={{ top: position.top, left: position.left }}
+        >
+          <button
+            onClick={handleSwap}
+            className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100"
+          >
+            Swap
+          </button>
+
+          <button
+            onClick={handleCopy}
+            className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100"
+          >
+            Copy
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ─── Item row ─────────────────────────────────────────────────────────────────
+function ItemRow({ item, bomId, isSplit = false, itemIndex, allBoms, onSwap }) {
+  const dispatch = useDispatch();
+
   const handleToggleDeliver = () => {
-    console.log("🎯 Toggle deliver clicked for:", { 
-      product_name: item.product_name, 
-      product_id: item.product_id,
-      bomId, 
-      itemIndex,
-      currentDeliver: item.deliver 
-    });
-    
-    // Dispatch with both ID and index for maximum compatibility
-    dispatch(toggleItemDeliver({ 
-      bomId, 
+    dispatch(toggleItemDeliver({
+      bomId,
       itemId: item.product_id,
-      itemIndex 
+      itemIndex
     }));
   };
 
   return (
-    <tr className={`border-b border-gray-100 group transition-colors ${item.deliver ? "bg-green-50" : isSplit ? "bg-orange-50/40" : "hover:bg-gray-50"}`}>
+    <tr
+      className={`border-b border-gray-100 group transition-colors ${
+        item.deliver
+          ? "bg-green-50"
+          : isSplit
+          ? "bg-orange-50/40"
+          : "hover:bg-gray-50"
+      }`}
+    >
+      {/* Icon */}
       <td className="pl-10 pr-2 py-2 w-10">
-        <div className={`w-8 h-8 rounded border flex items-center justify-center flex-shrink-0 ${isSplit ? "border-orange-200 bg-orange-50" : "border-gray-200 bg-gray-50"}`}>
-          {isSplit ? (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="1.8">
-              <path d="M16 3h5v5M8 21H3v-5M21 3l-7 7M3 21l7-7"/>
-            </svg>
-          ) : (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5">
-              <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
-            </svg>
-          )}
+        <div
+          className={`w-8 h-8 rounded border flex items-center justify-center ${
+            isSplit
+              ? "border-orange-200 bg-orange-50"
+              : "border-gray-200 bg-gray-50"
+          }`}
+        >
+          {isSplit ? "↔" : "▦"}
         </div>
-        </td>
+      </td>
+
+      {/* Product */}
       <td className="px-2 py-2">
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="min-w-0">
-            <p className="text-xs font-semibold text-gray-900 leading-tight">{item.product_name}</p>
-            {item.article_no && item.article_no !== item.product_name && (
-              <p className="text-xs text-gray-500 leading-tight mt-0.5 truncate max-w-md">{item.article_no}</p>
-            )}
+          <div>
+            <p className="text-xs font-semibold text-gray-900">
+              {item.product_name}
+            </p>
+          <p className="text-xs text-gray-500">
+            {item.article_no || "-"}
+          </p>
           </div>
+
           {isSplit && (
-            <span className="inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded bg-orange-100 text-orange-600 whitespace-nowrap flex-shrink-0">
+            <span className="text-[10px] px-1.5 py-0.5 bg-orange-100 text-orange-600 rounded">
               remaining
             </span>
           )}
         </div>
-        </td>
-      <td className="px-3 py-2 w-24 text-right">
-        <input
-          type="number"
-          value={inputVal}
-          onChange={(e) => setInputVal(e.target.value)}
-          onBlur={handleBlur}
-          onKeyDown={(e) => e.key === "Enter" && e.target.blur()}
-          className="w-16 text-right text-sm text-gray-800 border-0 focus:outline-none focus:ring-1 focus:ring-[#017e84] rounded px-1 py-0.5 bg-transparent hover:bg-gray-100"
-          min="0" step="0.5"
-        />
-        </td>
-      <td className="px-3 py-2 w-16 text-xs text-gray-500 font-medium">{item.uom_name}</td>
+      </td>
+
+      {/* Qty (READ ONLY) */}
+      <td className="px-3 py-2 w-24 text-center text-sm text-gray-800 font-medium">
+        {item.qty}
+      </td>
+
+      {/* Pick Qty */}
+      <td className="px-3 py-2 w-24 text-center text-sm text-gray-500 font-medium">
+        {item.pick_qty}
+      </td>
+
+      {/* UOM */}
+      <td className="px-3 py-2 w-16 text-xs text-gray-500 font-medium">
+        {item.uom_name}
+      </td>
+
+      {/* Status */}
       <td className="px-3 py-2 w-40 text-right">
         <StatusBadge status={item.status} />
-        </td>
-      <td className="px-3 py-2 w-12 text-center">
+      </td>
+
+      {/* Deliver toggle */}
+      {/* <td className="px-3 py-2 w-12 text-center">
         <button
           onClick={handleToggleDeliver}
-          className={`w-5 h-5 flex items-center justify-center mx-auto transition-colors rounded ${
+          className={`w-5 h-5 flex items-center justify-center mx-auto rounded ${
             item.deliver
               ? "text-green-600 bg-green-100"
               : "text-gray-300 hover:text-gray-500 hover:bg-gray-100"
@@ -240,27 +424,29 @@ function ItemRow({ item, bomId, isSplit = false, itemIndex }) {
         >
           <Check size={14} strokeWidth={item.deliver ? 2.5 : 1.5} />
         </button>
-        </td>
-      <td className="px-2 py-2 w-8 text-right opacity-0 group-hover:opacity-100 transition-opacity">
-        <button className="text-gray-400 hover:text-gray-600"><MoreHorizontal size={14} /></button>
-        </td>
+      </td> */}
+
+      {/* Menu */}
+      <td className="px-2 py-2 w-8 text-right opacity-0 group-hover:opacity-100">
+        <ItemContextMenu
+          item={item}
+          bomId={bomId}
+          itemIndex={itemIndex}
+          allBoms={allBoms}
+          onSwap={onSwap}
+        />
+      </td>
     </tr>
   );
 }
 
 // ─── BUM section ──────────────────────────────────────────────────────────────
-function BumSection({ bum }) {
+function BumSection({ bum, allBoms, onSwap }) {
   const dispatch = useDispatch();
   const [collapsed, setCollapsed] = useState(false);
 
   const items = bum.items || [];
   const deliverCnt = items.filter((i) => i.deliver).length;
-  const allDelivering = items.length > 0 && items.every((i) => i.deliver);
-
-  const handleToggleAll = () => {
-    console.log("🎯 Toggle all clicked for BOM:", bum.bom_name);
-    dispatch(toggleBumAllDeliver({ bomId: bum.bom_id }));
-  };
 
   return (
     <>
@@ -289,30 +475,25 @@ function BumSection({ bum }) {
                 {deliverCnt}/{items.length} ✓
               </span>
             )}
-            <StatusBadge status={bum.status} />
-            <button
-              onClick={handleToggleAll}
-              className={`text-xs px-2.5 py-1 rounded border font-medium ml-2 transition-colors ${
-                allDelivering ? "bg-green-500 text-white border-green-500" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
-              }`}
-            >
-              {allDelivering ? "✓ All" : "Select all"}
-            </button>
-            <button className="text-gray-300 hover:text-gray-500 ml-1"><MoreHorizontal size={15} /></button>
+            {/* <button className="text-gray-300 hover:text-gray-500 ml-1"><MoreHorizontal size={15} /></button> */}
           </div>
         </td>
       </tr>
       {!collapsed && items.map((item, idx) => (
         <ItemRow
-          key={`${bum.bom_id}-${item.product_id ?? idx}`}
+          key={`${bum.bom_id}-${item.product_id ?? 'x'}-${idx}`}
           item={item}
           bomId={bum.bom_id}
           itemIndex={idx}
+          allBoms={allBoms}
+          onSwap={onSwap}
         />
       ))}
     </>
   );
 }
+
+
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function OrderDetailPage() {
@@ -329,24 +510,33 @@ export default function OrderDetailPage() {
   const [selectedbomIds, setSelectedbomIds] = useState([]);
   const [projectNo, setProjectNo] = useState("");
 
-  const fetchOrder = useCallback(async () => {
-    const res = await getOrderById(orderId);
-    if (res?.success) {
-      dispatch(setOrderDetail(res.data));
-      setProjectNo(res.data?.project_id || "");
-      setSelectedbomIds((res.data?.boms || []).map((b) => b.bom_id));
-    }
-  }, [orderId, dispatch, getOrderById]);
+const getOrderByIdRef = useRef(getOrderById);
+useEffect(() => { getOrderByIdRef.current = getOrderById; }, [getOrderById]);
 
-  useEffect(() => {
-    fetchOrder();
-  }, [fetchOrder]);
+const fetchOrder = useCallback(async () => {
+  const res = await getOrderByIdRef.current(orderId);
+  if (res?.success) {
+    dispatch(setOrderDetail(res.data));
+    setProjectNo(res.data?.project_name || "");
+    setSelectedbomIds((res.data?.boms || []).map((b) => b.bom_id));
+  }
+}, [orderId, dispatch]); // ← no getOrderById here
 
-  useEffect(() => {
-    if (order && selectedbomIds.length === 0 && order.boms) {
-      setSelectedbomIds(order.boms.map((b) => b.bom_id));
-    }
-  }, [order]);
+useEffect(() => {
+  fetchOrder();
+}, [fetchOrder]);
+
+useEffect(() => {
+  setSelectedbomIds([]);
+}, [orderId]);
+
+  // Swap handler — swaps two items across boms in Redux
+  const handleSwap = useCallback(({ bomId, itemIndex, targetBomId, targetItemIndex }) => {
+    dispatch({
+      type: "orders/swapItems",
+      payload: { bomId, itemIndex, targetBomId, targetItemIndex },
+    });
+  }, [dispatch]);
 
   const handleAddRemark = () => {
     if (!remarkText.trim()) return;
@@ -376,34 +566,17 @@ export default function OrderDetailPage() {
   );
 
   const requisitionNo = order.requisition_no || `REQ-${order.id}`;
-  const requisitionDate = order.requisition_date || new Date().toLocaleDateString("en-GB", {
-    day: "2-digit", month: "short", year: "numeric",
-  });
+  
+
+  const requisitionDate = order.requisition_date
+    ? formatDate(order.requisition_date)
+    : formatDate(new Date());
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-white">
       {/* Top action bar */}
       <div className="bg-white border-b border-gray-200 px-2 sm:px-4 py-1.5 flex items-center gap-0.5 flex-shrink-0 overflow-x-auto">
-        <button className="flex items-center gap-1.5 text-xs text-[#e04c4c] hover:bg-red-50 px-2.5 py-1.5 rounded transition-colors whitespace-nowrap">
-          <XCircle size={13} /> Cancel order
-        </button>
-        <div className="w-px h-4 bg-gray-200 mx-0.5 flex-shrink-0" />
-        <button className="flex items-center gap-1.5 text-xs text-gray-600 hover:bg-gray-100 px-2.5 py-1.5 rounded transition-colors whitespace-nowrap">
-          <Paperclip size={13} /> Attachments
-        </button>
-        <button className="flex items-center gap-1.5 text-xs text-gray-600 hover:bg-gray-100 px-2.5 py-1.5 rounded transition-colors whitespace-nowrap">
-          <Copy size={13} /> Copy
-        </button>
-        <button className="flex items-center gap-1.5 text-xs text-gray-600 hover:bg-gray-100 px-2.5 py-1.5 rounded transition-colors whitespace-nowrap">
-          <Printer size={13} /> Print <ChevronDown size={10} className="text-gray-400" />
-        </button>
-        <button className="flex items-center gap-1.5 text-xs text-gray-600 hover:bg-gray-100 px-2.5 py-1.5 rounded transition-colors whitespace-nowrap">
-          <Mail size={13} /> Email <ChevronDown size={10} className="text-gray-400" />
-        </button>
-        <div className="flex-1" />
-        <div className="flex items-center gap-1.5 text-xs text-green-600 font-medium pr-2 whitespace-nowrap">
-          <CheckCircle2 size={16} className="text-green-500" /> Saved
-        </div>
+        <ExportDropdown order={order} />
       </div>
 
       {/* Scrollable body */}
@@ -417,19 +590,9 @@ export default function OrderDetailPage() {
               </span>
             </div>
             <div className="flex-1 min-w-0">
-              <div className="mb-1"><StatusBadge status={order.status} /></div>
-              <p className="text-[#017e84] font-semibold text-sm cursor-pointer hover:underline">{order.id}</p>
+              <p className="text-[#017e84] font-semibold text-sm cursor-pointer hover:underline"># ID :{order.id}</p>
               <p className="text-base sm:text-lg font-semibold text-gray-900 leading-snug mt-0.5">{order.requisition_no}</p>
               <p className="text-xs text-gray-500 mt-0.5">{order.project_name}</p>
-              <button className="text-xs text-[#017e84] mt-2 hover:underline">+ Set put away location</button>
-            </div>
-            <div className="flex flex-col items-end gap-2 flex-shrink-0 text-right">
-              <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                <PersonIcon /><span className="hidden sm:inline">Assigned to</span>
-              </div>
-              <button className="px-2 sm:px-3 py-1 border border-gray-300 rounded-full text-xs text-gray-600 hover:bg-gray-50 whitespace-nowrap">
-                Not prioritized ☆
-              </button>
             </div>
           </div>
 
@@ -448,22 +611,17 @@ export default function OrderDetailPage() {
               <div className="flex items-center gap-1 group cursor-pointer">
                 <input
                   type="text"
+                  disabled
                   value={projectNo}
                   onChange={(e) => {
                     setProjectNo(e.target.value);
                     dispatch(updateOrderField({ field: "project_id", value: e.target.value }));
                   }}
-                  placeholder="Select project…"
                   className="text-sm text-gray-800 bg-transparent focus:outline-none w-full placeholder-gray-300 border-b border-transparent focus:border-[#017e84] hover:border-gray-300 transition-colors pb-0.5"
                 />
-                <ChevronDown size={12} className="text-gray-300 flex-shrink-0 group-hover:text-gray-500 transition-colors" />
               </div>
             </div>
           </div>
-
-          <button className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 mt-3">
-            <Settings size={12} /> Manage
-          </button>
         </div>
 
         {/* Remarks + BOM selector */}
@@ -480,7 +638,7 @@ export default function OrderDetailPage() {
                     </button>
                   </div>
                 ))}
-                {addingRemark ? (
+                {addingRemark && (
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <input
                       autoFocus
@@ -493,11 +651,13 @@ export default function OrderDetailPage() {
                     <button onClick={handleAddRemark} className="text-xs bg-[#017e84] text-white px-2.5 py-1 rounded hover:bg-[#015f64]">Add</button>
                     <button onClick={() => { setAddingRemark(false); setRemarkText(""); }} className="text-gray-400 hover:text-gray-600"><X size={13} /></button>
                   </div>
-                ) : (
-                  <button onClick={() => setAddingRemark(true)} className="flex items-center gap-1 text-xs text-[#017e84] hover:underline">
-                    <Plus size={12} /> Add remarks
-                  </button>
                 )}
+                {/* // : (
+                //   <button onClick={() => setAddingRemark(true)} className="flex items-center gap-1 text-xs text-[#017e84] hover:underline">
+                //     <Plus size={12} /> Add remark
+                //   </button>
+                // )
+                // } */}
               </div>
             </div>
 
@@ -508,38 +668,12 @@ export default function OrderDetailPage() {
               <BumDropdown bums={boms} selectedIds={selectedbomIds} onChange={setSelectedbomIds} />
             </div>
           </div>
-
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mt-4">
-            <button
-              onClick={() => navigate(`/orders/${order.id}/pickup`)}
-              className="flex items-center gap-1.5 text-sm text-[#017e84] hover:underline"
-            >
-              <Eye size={14} /> View full pick list
-              {totalDeliverCount > 0 && (
-                <span className="ml-1 text-xs bg-[#017e84] text-white font-bold px-1.5 py-0.5 rounded-full leading-none">
-                  {totalDeliverCount}
-                </span>
-              )}
-            </button>
-            <button className="w-full sm:w-auto px-5 py-2 bg-[#e8a825] hover:bg-[#d4971f] text-white font-semibold text-sm rounded transition-colors">
-              Complete order
-            </button>
-          </div>
         </div>
 
         {/* Overview section */}
         <div className="px-4 sm:px-6 pt-4 pb-2">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-start mb-3">
             <p className="text-base font-semibold text-gray-800">Overview</p>
-            <div className="flex items-center gap-2 text-xs text-gray-500">
-              <span>Show raw materials</span>
-              <button
-                onClick={() => setShowRawMaterials((p) => !p)}
-                className={`relative inline-flex w-9 h-5 rounded-full transition-colors ${showRawMaterials ? "bg-[#017e84]" : "bg-gray-200"}`}
-              >
-                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${showRawMaterials ? "translate-x-4" : "translate-x-0.5"}`} />
-              </button>
-            </div>
           </div>
 
           <div className="border border-gray-200 rounded overflow-hidden overflow-x-auto">
@@ -559,25 +693,25 @@ export default function OrderDetailPage() {
                   <tr className="bg-gray-50 border-b border-gray-200">
                     <th className="w-10 pl-10 pr-2 py-2" />
                     <th className="px-2 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Component</th>
-                    <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">Qty</th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide w-16">Unit</th>
-                    <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide w-40">Status</th>
-                    <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide w-12">Deliver</th>
+                    <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">Qty</th>
+                    <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide w-16">Pick Qty</th>
+                    <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide w-16">Unit</th>
                     <th className="w-8" />
-                   </tr>
+                  </tr>
                 </thead>
                 <tbody>
                   {visibleBums.map((bum) => (
-                    <BumSection key={bum.bom_id} bum={bum} />
+                    <BumSection
+                      key={bum.bom_id}
+                      bum={bum}
+                      allBoms={boms}
+                      onSwap={handleSwap}
+                    />
                   ))}
                 </tbody>
               </table>
             )}
           </div>
-
-          <button className="flex items-center gap-1 text-xs text-[#017e84] hover:underline mt-3 mb-6">
-            <Plus size={12} /> Add another finished product
-          </button>
         </div>
       </div>
     </div>

@@ -403,6 +403,7 @@ export default function OrderAddPage() {
         items: bom.items.map((item) => ({
           product_id: item.id,
           qty: item.neededQty,
+          pick_qty: item.pickNos,
         })),
       })),
     };
@@ -433,7 +434,7 @@ export default function OrderAddPage() {
     <div className="flex flex-col h-full overflow-hidden bg-white">
 
       {/* ── Top action bar ── */}
-      <div className="bg-white border-b border-gray-200 px-2 sm:px-4 py-1.5 flex items-center gap-0.5 flex-shrink-0 overflow-x-auto">
+      {/* <div className="bg-white border-b border-gray-200 px-2 sm:px-4 py-1.5 flex items-center gap-0.5 flex-shrink-0 overflow-x-auto">
         <button
           type="button"
           onClick={() => {
@@ -460,7 +461,7 @@ export default function OrderAddPage() {
         <div className="flex items-center gap-1.5 text-xs text-gray-400 font-medium pr-2 whitespace-nowrap">
           <div className="w-2 h-2 rounded-full bg-amber-400" /> Draft - Not saved
         </div>
-      </div>
+      </div> */}
 
       {/* ── Scrollable body ── */}
       <div className="flex-1 overflow-y-auto">
@@ -506,7 +507,7 @@ export default function OrderAddPage() {
                 </option>
                 {projects.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.project_name}
+                    {p.project_name}  {p.partner_name}
                   </option>
                 ))}
               </select>
@@ -628,9 +629,9 @@ export default function OrderAddPage() {
             )}
           </div>
 
-          <button type="button" className="flex items-center gap-1 text-xs text-[#017e84] hover:underline mt-3 mb-6">
+          {/* <button type="button" className="flex items-center gap-1 text-xs text-[#017e84] hover:underline mt-3 mb-6">
             <Plus size={12} /> Add another finished product
-          </button>
+          </button> */}
         </div>
       </div>
     </div>
