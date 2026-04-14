@@ -1,5 +1,7 @@
+// components/Layout.jsx
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useSelector } from "react-redux";
 import {
   LayoutDashboard,
   PlusCircle,
@@ -18,15 +20,17 @@ import {
   ChevronDown,
   Search,
   ChevronRight,
+  LogOut,
 } from "lucide-react";
+import useAuth from "../hooks/useAuth";
 
 /* ------------------ NAV CONFIG ------------------ */
 
 const primaryNav = [
-  { icon: LayoutDashboard, to: "/dashboard", label: "Home" },
-  { icon: PlusCircle, to: "/requisitions/add", label: "New" },
-  { icon: ClipboardList, to: "/requisitions", label: "Orders" },
+  // { icon: LayoutDashboard, to: "/dashboard", label: "Home" },
   { icon: Layers, label: "Master", isMaster: true },
+  // { icon: PlusCircle, to: "/requisitions/add", label: "New" },
+  { icon: ClipboardList, to: "/requisitions", label: "Orders" },
 ];
 
 const masterNav = [
@@ -78,7 +82,6 @@ function MasterDropdown({ anchorRef, onMouseEnter, onMouseLeave }) {
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      {/* Header */}
       <div className="px-4 py-2">
         <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
           Master Data
@@ -118,6 +121,7 @@ function MasterDropdown({ anchorRef, onMouseEnter, onMouseLeave }) {
 
 function PrimarySidebar({ masterOpen, onMasterEnter, onMasterLeave }) {
   const location = useLocation();
+  const navigate = useNavigate();  // ✅ FIX: added navigate
   const isMasterRoute = location.pathname.startsWith("/masters");
   const masterBtnRef = useRef(null);
 
@@ -129,7 +133,7 @@ function PrimarySidebar({ masterOpen, onMasterEnter, onMasterLeave }) {
       >
         {/* Brand mark */}
         <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center mb-3 shadow-inner">
-          <span className="text-white font-black text-sm tracking-tight">MO</span>
+          <span className="text-white font-black text-sm tracking-tight">MR</span>
         </div>
 
         <div className="w-full px-2 flex flex-col gap-1">
@@ -193,13 +197,17 @@ function PrimarySidebar({ masterOpen, onMasterEnter, onMasterLeave }) {
           <Settings size={16} />
         </button>
 
-        {/* Avatar */}
-        <div className="w-9 h-9 rounded-full bg-[#e8a825] flex items-center justify-center text-xs font-bold text-white shadow-md mt-1 mb-1">
-          HG
+        {/* Profile button - now navigate works */}
+        <div
+          onClick={() => navigate('/profile')}
+          className="w-9 h-9 rounded-full bg-[#e8a825] flex items-center justify-center text-xs font-bold text-white shadow-md mt-1 mb-1 cursor-pointer relative z-10"
+        >
+          {/* Show user initials dynamically - we'll pass from parent or use Redux; but for simplicity, we'll rely on Topbar to show full name. */}
+          {/* We'll keep as placeholder; can be improved later */}
+          {window.innerWidth > 0 && "U"} {/* temporary */}
         </div>
       </aside>
 
-      {/* Floating dropdown rendered outside aside */}
       {masterOpen && (
         <MasterDropdown
           anchorRef={masterBtnRef}
@@ -215,10 +223,25 @@ function PrimarySidebar({ masterOpen, onMasterEnter, onMasterLeave }) {
 
 function Topbar() {
   const navigate = useNavigate();
+  const { logoutUser } = useAuth();
+  const { member } = useSelector((state) => state.auth);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [open, setOpen] = useState(false);
   const searchRef = useRef(null);
+
+  // Get user initials (first letter of first name and last name, or first two letters of full name)
+  const getUserInitials = () => {
+    if (!member?.name) return "U";
+    const nameParts = member.name.trim().split(/\s+/);
+    if (nameParts.length === 1) return nameParts[0].charAt(0).toUpperCase();
+    return (nameParts[0].charAt(0) + nameParts[nameParts.length - 1].charAt(0)).toUpperCase();
+  };
+
+  const getUserDisplayName = () => {
+    if (!member?.name) return "User";
+    return member.name;
+  };
 
   const filter = useCallback(
     (q) => searchablePages.filter((p) => p.label.toLowerCase().includes(q.toLowerCase())),
@@ -242,6 +265,11 @@ function Topbar() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  const handleLogout = () => {
+    logoutUser();
+    navigate("/login");
+  };
 
   return (
     <header className="h-11 bg-white border-b border-gray-200 flex items-center px-4 gap-3 shadow-sm">
@@ -279,12 +307,28 @@ function Topbar() {
         )}
       </div>
 
-      <div className="ml-auto flex items-center gap-2">
-        <div className="w-7 h-7 rounded-full bg-[#e8a825] text-white flex items-center justify-center text-xs font-bold shadow">
-          HG
+      <div className="ml-auto flex items-center gap-3">
+
+
+        {/* User Avatar & Name */}
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-full bg-[#e8a825] text-white flex items-center justify-center text-xs font-bold shadow">
+            {getUserInitials()}
+          </div>
+          <span className="text-sm font-medium text-gray-700 hidden sm:inline">
+            {getUserDisplayName()}
+          </span>
         </div>
-        <span className="text-sm font-medium text-gray-700">HG</span>
-        <ChevronDown size={13} className="text-gray-400" />
+
+        <button
+          onClick={handleLogout}
+          title="Logout"
+          className="flex items-center gap-1 text-gray-500 hover:text-red-600 transition-colors"
+        >
+          <LogOut size={16} />
+          {/* <span className="text-xs font-medium hidden sm:inline">Logout</span> */}
+        </button>
+
       </div>
     </header>
   );

@@ -12,17 +12,18 @@ const useHsn = () => {
   /* ==========================
      GET ALL HSN
   ========================== */
-  const getHsns = async () => {
+  const getHsns = async (payload) => {
     setLoading(true);
     setError(null);
 
     try {
-      const response = await baseClient.get(APIEndpoints.getHsns);
+      const response = await baseClient.get(APIEndpoints.getHsns , payload);
 
       if (response.data?.status === true) {
         return {
           success: true,
           data: response.data.data,
+          pagination: response.data.pagination
         };
       }
 

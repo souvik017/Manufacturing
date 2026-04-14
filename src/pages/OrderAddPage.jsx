@@ -1,18 +1,18 @@
 import React, { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import { useDispatch } from "react-redux";
-import { appendOrder } from "../redux/Slices/orderSlice";
+import { useDispatch, useSelector } from "react-redux";
+import { updateDraftOrder, appendOrder, clearDraftOrder } from "../redux/Slices/orderSlice";
 import useBom from "../hooks/useBom";
 import useOrders from "../hooks/useOrders";
 import useProject from "../hooks/useProject";
+import useProduct from "../hooks/useProduct";
 import StatusBadge from "../components/StatusBadge";
 import {
-  X, Plus, Settings, Paperclip, Copy, Printer,
-  Mail, XCircle, Check, MoreHorizontal,
-  Search, ChevronDown, ChevronRight,
+  X, Plus, Settings, Search, ChevronDown, ChevronRight, Check, MoreHorizontal,
 } from "lucide-react";
 
-// ─── BOM multi-select dropdown ────────────────────────────────────────────────
+// ─── BOM multi-select dropdown (unchanged) ───────────────────────────────────
 function BomDropdown({ boms, selectedIds, onChange, bomLoading }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -85,7 +85,7 @@ function BomDropdown({ boms, selectedIds, onChange, bomLoading }) {
       </button>
 
       {open && (
-        <div className="absolute z-40 left-0 top-full mt-1 w-80 bg-white border border-gray-200 rounded shadow-xl overflow-hidden">
+        <div className="absolute z-[9999] left-0 top-full mt-1 w-80 bg-white border border-gray-200 rounded shadow-2xl overflow-hidden">
           <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 bg-gray-50">
             <Search size={12} className="text-gray-400 flex-shrink-0" />
             <input
@@ -160,15 +160,32 @@ function BomDropdown({ boms, selectedIds, onChange, bomLoading }) {
   );
 }
 
-// ─── Item Row ─────────────────────────────────────────────────────────────────
-function ItemRow({ item, onUpdateItem }) {
+// ─── Item Row (unchanged) ───────────────────────────────────────────────────
+function ItemRow({ item, onUpdateItem, onSwap, onCopy, onRemove, productList, productLoading }) {
   const [localNeeded, setLocalNeeded] = useState(String(item.neededQty));
   const [localPick, setLocalPick] = useState(String(item.pickNos));
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [swapSelectorOpen, setSwapSelectorOpen] = useState(false);
+  const [swapSearch, setSwapSearch] = useState("");
+  const [menuCoords, setMenuCoords] = useState(null);
+  const [swapCoords, setSwapCoords] = useState(null);
+  const menuButtonRef = useRef(null);
+  const menuRef = useRef(null);
+  const swapRef = useRef(null);
 
   useEffect(() => {
     setLocalNeeded(String(item.neededQty));
     setLocalPick(String(item.pickNos));
   }, [item.neededQty, item.pickNos]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
+      if (swapRef.current && !swapRef.current.contains(e.target)) setSwapSelectorOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   const handleNeededBlur = () => {
     let v = parseFloat(localNeeded);
@@ -190,8 +207,64 @@ function ItemRow({ item, onUpdateItem }) {
   const onKey = (e, fn) => { if (e.key === "Enter") { e.preventDefault(); fn(); } };
   const remaining = (item.neededQty - item.pickNos).toFixed(2);
 
+  const filteredProducts = productList.filter(
+    (p) => p.id !== item.productId && (!swapSearch.trim() || p.product_name?.toLowerCase().includes(swapSearch.toLowerCase()) || p.article_no?.toLowerCase().includes(swapSearch.toLowerCase()))
+  );
+
+  const isMarked = item.pickNos > 0;
+  const toggleMark = () => {
+    if (isMarked) {
+      onUpdateItem({ pickNos: 0 });
+    } else {
+      const newPick = item.neededQty > 0 ? item.neededQty : 1;
+      onUpdateItem({ pickNos: newPick });
+    }
+  };
+
+  const openMenu = () => {
+    const rect = menuButtonRef.current?.getBoundingClientRect();
+    if (rect) {
+      setMenuCoords({
+        top: rect.bottom + window.scrollY,
+        right: window.innerWidth - rect.right,
+      });
+    }
+    setMenuOpen(true);
+  };
+
+  const openSwapSelector = () => {
+    const rect = menuButtonRef.current?.getBoundingClientRect();
+    if (rect) {
+      setSwapCoords({
+        top: rect.bottom + window.scrollY,
+        right: window.innerWidth - rect.right,
+      });
+    }
+    setSwapSelectorOpen(true);
+    setMenuOpen(false);
+  };
+
+  const handleSwapSelect = (product) => {
+    onSwap(product.id);
+    setSwapSelectorOpen(false);
+    setSwapSearch("");
+    setSwapCoords(null);
+  };
+
+  const handleCopy = () => {
+    onCopy();
+    setMenuOpen(false);
+    setMenuCoords(null);
+  };
+
+  const handleRemove = () => {
+    onRemove();
+    setMenuOpen(false);
+    setMenuCoords(null);
+  };
+
   return (
-    <tr className={`border-b border-gray-100 group transition-colors ${item.delivered ? "bg-green-100" : "hover:bg-gray-50"}`}>
+    <tr className={`border-b border-gray-100 group transition-colors ${isMarked ? "bg-green-100" : "hover:bg-gray-50"}`}>
       <td className="pl-10 pr-2 py-2 w-10">
         <div className="w-8 h-8 rounded border border-gray-200 bg-gray-50 flex items-center justify-center">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5">
@@ -216,24 +289,174 @@ function ItemRow({ item, onUpdateItem }) {
       </td>
       <td className="px-3 py-2 w-28 text-right text-sm text-gray-700">{remaining}</td>
       <td className="px-3 py-2 w-24 text-right"><StatusBadge status={item.status} /></td>
-      <td className="px-3 py-2 w-12 text-center">
-        <button onClick={() => onUpdateItem({ delivered: !item.delivered })}
-          className={`w-5 h-5 flex items-center justify-center mx-auto transition-colors ${item.delivered ? "text-green-600" : "text-gray-300 hover:text-gray-500"}`}>
-          <Check size={16} strokeWidth={item.delivered ? 2.5 : 1.5} />
+      <td className="px-2 py-2 w-10 text-center">
+        <button
+          onClick={toggleMark}
+          className={`w-5 h-5 flex items-center justify-center mx-auto rounded transition-colors ${
+            isMarked
+              ? "text-[#017e84] bg-[#e8f5f5]"
+              : "text-gray-300 hover:text-gray-500 hover:bg-gray-100"
+          }`}
+          title={isMarked ? "Unmark item" : "Mark item for draft"}
+        >
+          <Check size={14} strokeWidth={isMarked ? 2.5 : 1.5} />
         </button>
       </td>
-      <td className="px-2 py-2 w-8 text-right opacity-0 group-hover:opacity-100 transition-opacity">
-        <button className="text-gray-400 hover:text-gray-600"><MoreHorizontal size={14} /></button>
+      <td className="px-2 py-2 w-8 text-right relative">
+        <div ref={menuButtonRef}>
+          <button
+            onClick={openMenu}
+            className="text-gray-400 hover:text-gray-600 transition-opacity opacity-0 group-hover:opacity-100 focus:opacity-100"
+          >
+            <MoreHorizontal size={14} />
+          </button>
+        </div>
+        {menuOpen && menuCoords && createPortal(
+          <div
+            ref={menuRef}
+            style={{
+              position: 'absolute',
+              top: menuCoords.top,
+              right: menuCoords.right,
+            }}
+            className="w-32 bg-white border border-gray-200 rounded shadow-lg z-[9998]"
+          >
+            <button
+              onClick={openSwapSelector}
+              className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-100"
+            >
+              Swap
+            </button>
+            <button
+              onClick={handleCopy}
+              className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-100"
+            >
+              Copy
+            </button>
+            <button
+              onClick={handleRemove}
+              className="w-full text-left px-3 py-1.5 text-xs text-red-600 hover:bg-gray-100"
+            >
+              Remove
+            </button>
+          </div>,
+          document.body
+        )}
+        {swapSelectorOpen && swapCoords && createPortal(
+          <div
+            ref={swapRef}
+            style={{
+              position: 'absolute',
+              top: swapCoords.top,
+              right: swapCoords.right,
+            }}
+            className="w-[20vw] bg-white border border-gray-200 rounded shadow-xl z-[9999]"
+          >
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 bg-gray-50">
+              <Search size={12} className="text-gray-400" />
+              <input
+                autoFocus
+                value={swapSearch}
+                onChange={(e) => setSwapSearch(e.target.value)}
+                placeholder="Search product..."
+                className="flex-1 text-xs bg-transparent focus:outline-none"
+              />
+              {swapSearch && (
+                <button onClick={() => setSwapSearch("")} className="text-gray-400 hover:text-gray-600">
+                  <X size={11} />
+                </button>
+              )}
+            </div>
+            <div className="max-h-48 overflow-y-auto">
+              {productLoading ? (
+                <p className="text-xs text-gray-400 px-4 py-3 text-center">Loading...</p>
+              ) : filteredProducts.length === 0 ? (
+                <p className="text-xs text-gray-400 px-4 py-3 text-center">
+                  {swapSearch ? "No products match" : "No other products"}
+                </p>
+              ) : (
+                filteredProducts.map((prod) => (
+                  <button
+                    key={prod.id}
+                    onClick={() => handleSwapSelect(prod)}
+                    className="w-full text-left px-3 py-2 border-b border-gray-100 last:border-0 hover:bg-[#f0fafa] text-xs"
+                  >
+                    <p className="font-semibold text-gray-800">{prod.product_name}</p>
+                    <p className="text-gray-400 text-[11px]">{prod.article_no} · {prod.uom_name}</p>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>,
+          document.body
+        )}
       </td>
     </tr>
   );
 }
 
-// ─── BomSection (collapsible) ─────────────────────────────────────────────────
-function BomSection({ bom, onItemUpdate }) {
+// ─── BomSection (unchanged) ─────────────────────────────────────────────────
+function BomSection({ bom, onItemUpdate, onSwapItem, onCopyItem, onRemoveItem, onAddProductToBom, onRemoveBom, productList, productLoading }) {
   const [collapsed, setCollapsed] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [productPickerOpen, setProductPickerOpen] = useState(false);
+  const [productSearch, setProductSearch] = useState("");
+  const [menuCoords, setMenuCoords] = useState(null);
+  const [pickerCoords, setPickerCoords] = useState(null);
+  const menuButtonRef = useRef(null);
+  const menuRef = useRef(null);
+  const pickerRef = useRef(null);
   const items = bom.items || [];
-  const countDelivered = items.filter((i) => i.delivered).length;
+  const countMarked = items.filter((i) => i.pickNos > 0).length;
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
+      if (pickerRef.current && !pickerRef.current.contains(e.target)) setProductPickerOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const openMenu = () => {
+    const rect = menuButtonRef.current?.getBoundingClientRect();
+    if (rect) {
+      setMenuCoords({
+        top: rect.bottom + window.scrollY,
+        right: window.innerWidth - rect.right,
+      });
+    }
+    setMenuOpen(true);
+  };
+
+  const handleAddProductClick = () => {
+    setMenuOpen(false);
+    const rect = menuButtonRef.current?.getBoundingClientRect();
+    if (rect) {
+      setPickerCoords({
+        top: rect.bottom + window.scrollY,
+        right: window.innerWidth - rect.right,
+      });
+    }
+    setProductPickerOpen(true);
+    setProductSearch("");
+  };
+
+  const handleRemoveBomClick = () => {
+    setMenuOpen(false);
+    onRemoveBom(bom.bom_id);
+  };
+
+  const filteredProducts = productList.filter(
+    (p) => !productSearch.trim() || p.product_name?.toLowerCase().includes(productSearch.toLowerCase()) || p.article_no?.toLowerCase().includes(productSearch.toLowerCase())
+  );
+
+  const handleSelectProduct = (product) => {
+    onAddProductToBom(bom.bom_id, product);
+    setProductPickerOpen(false);
+    setProductSearch("");
+    setPickerCoords(null);
+  };
 
   return (
     <>
@@ -255,7 +478,7 @@ function BomSection({ bom, onItemUpdate }) {
                 {collapsed && (
                   <span className="ml-2 text-gray-400">
                     · {items.length} items hidden
-                    {countDelivered > 0 && <span className="text-green-600 ml-1">{countDelivered}✓</span>}
+                    {countMarked > 0 && <span className="text-[#017e84] ml-1 font-medium">{countMarked}✓</span>}
                   </span>
                 )}
               </p>
@@ -263,7 +486,88 @@ function BomSection({ bom, onItemUpdate }) {
             <span className="text-sm text-gray-700 font-medium mr-1">
               {items.length} <span className="text-xs text-gray-400">{bom.uom_name}</span>
             </span>
-            <button type="button" className="text-gray-300 hover:text-gray-500 ml-1"><MoreHorizontal size={15} /></button>
+            <div className="relative">
+              <button
+                ref={menuButtonRef}
+                onClick={openMenu}
+                className="text-gray-300 hover:text-gray-500 ml-1"
+              >
+                <MoreHorizontal size={15} />
+              </button>
+              {menuOpen && menuCoords && createPortal(
+                <div
+                  ref={menuRef}
+                  style={{
+                    position: 'absolute',
+                    top: menuCoords.top,
+                    right: menuCoords.right,
+                  }}
+                  className="w-36 bg-white border border-gray-200 rounded shadow-lg z-[9998]"
+                >
+                  <button
+                    onClick={handleAddProductClick}
+                    className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-100"
+                  >
+                    Add product
+                  </button>
+                  <button
+                    onClick={handleRemoveBomClick}
+                    className="w-full text-left px-3 py-1.5 text-xs text-red-600 hover:bg-gray-100"
+                  >
+                    Remove BOM
+                  </button>
+                </div>,
+                document.body
+              )}
+              {productPickerOpen && pickerCoords && createPortal(
+                <div
+                  ref={pickerRef}
+                  style={{
+                    position: 'absolute',
+                    top: pickerCoords.top,
+                    right: pickerCoords.right,
+                  }}
+                  className="w-[20vw] bg-white border border-gray-200 rounded shadow-xl z-[9999]"
+                >
+                  <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 bg-gray-50">
+                    <Search size={12} className="text-gray-400" />
+                    <input
+                      autoFocus
+                      value={productSearch}
+                      onChange={(e) => setProductSearch(e.target.value)}
+                      placeholder="Search product..."
+                      className="flex-1 text-xs bg-transparent focus:outline-none"
+                    />
+                    {productSearch && (
+                      <button onClick={() => setProductSearch("")} className="text-gray-400 hover:text-gray-600">
+                        <X size={11} />
+                      </button>
+                    )}
+                  </div>
+                  <div className="max-h-48 overflow-y-auto">
+                    {productLoading ? (
+                      <p className="text-xs text-gray-400 px-4 py-3 text-center">Loading...</p>
+                    ) : filteredProducts.length === 0 ? (
+                      <p className="text-xs text-gray-400 px-4 py-3 text-center">
+                        {productSearch ? "No products match" : "No products available"}
+                      </p>
+                    ) : (
+                      filteredProducts.map((prod) => (
+                        <button
+                          key={prod.id}
+                          onClick={() => handleSelectProduct(prod)}
+                          className="w-full text-left px-3 py-2 border-b border-gray-100 last:border-0 hover:bg-[#f0fafa] text-xs"
+                        >
+                          <p className="font-semibold text-gray-800">{prod.product_name}</p>
+                          <p className="text-gray-400 text-[11px]">{prod.article_no} · {prod.uom_name}</p>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>,
+                document.body
+              )}
+            </div>
           </div>
         </td>
       </tr>
@@ -272,46 +576,49 @@ function BomSection({ bom, onItemUpdate }) {
           key={item.id}
           item={item}
           onUpdateItem={(updates) => onItemUpdate(item.id, updates)}
+          onSwap={(newProductId) => onSwapItem(item.id, newProductId)}
+          onCopy={() => onCopyItem(item.id)}
+          onRemove={() => onRemoveItem(item.id)}
+          productList={productList}
+          productLoading={productLoading}
         />
       ))}
     </>
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// ─── Main Page (OrderAddPage) with persistent cache and merge support ───────
 export default function OrderAddPage() {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const { getBoms, loading: bomLoading } = useBom();
   const { createOrder, loading: saving } = useOrders();
   const { getProjects } = useProject();
+  const { getProducts, loading: productLoading } = useProduct();
 
-  // BOM catalogue
+  const draftOrder = useSelector((s) => s.orders?.draftOrder);
+
   const [bomList, setBomList] = useState([]);
   const [selectedBomIds, setSelectedBomIds] = useState([]);
-
-  // Projects
+  const [productList, setProductList] = useState([]);
   const [projects, setProjects] = useState([]);
   const [projectsLoading, setProjectsLoading] = useState(true);
 
-  // Header fields
   const [requisitionNo, setRequisitionNo] = useState("");
   const [requisitionDate, setRequisitionDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [projectId, setProjectId] = useState("");
-
-  // Remarks
+  const [remarks, setRemarks] = useState([]);
   const [addingRemark, setAddingRemark] = useState(false);
   const [remarkText, setRemarkText] = useState("");
-  const [remarks, setRemarks] = useState([]);
-
   const [showRawMaterials, setShowRawMaterials] = useState(false);
 
-  // Enriched BOMs
   const [enrichedBoms, setEnrichedBoms] = useState([]);
+  
+  // Persistent cache for BOM data (preserves pickNos, etc. even when deselected)
+  const bomsCacheRef = useRef(new Map());
+  const isRestoringRef = useRef(false);
 
-  /* ==========================
-     FETCH BOMs
-  ========================== */
+  // Fetch BOMs once
   useEffect(() => {
     const fetchBoms = async () => {
       const res = await getBoms();
@@ -320,9 +627,16 @@ export default function OrderAddPage() {
     fetchBoms();
   }, []);
 
-  /* ==========================
-     FETCH PROJECTS
-  ========================== */
+  // Fetch products once
+  useEffect(() => {
+    const fetchProducts = async () => {
+      const res = await getProducts();
+      if (res?.success) setProductList(res.data || []);
+    };
+    fetchProducts();
+  }, []);
+
+  // Fetch projects once
   useEffect(() => {
     const fetchProjects = async () => {
       setProjectsLoading(true);
@@ -333,36 +647,87 @@ export default function OrderAddPage() {
     fetchProjects();
   }, []);
 
-  /* ==========================
-     ENRICH ON SELECTION CHANGE
-  ========================== */
+  // Restore from draft when component mounts or draft changes externally
   useEffect(() => {
-    setEnrichedBoms((prev) => {
-      const prevMap = Object.fromEntries(prev.map((b) => [b.bom_id, b]));
-      return selectedBomIds.map((id) => {
-        if (prevMap[id]) return prevMap[id];
-        const bom = bomList.find((b) => b.bom_id === id);
-        if (!bom) return null;
-        return {
+    if (draftOrder && draftOrder.boms && draftOrder.boms.length > 0) {
+      isRestoringRef.current = true;
+      setRequisitionNo(draftOrder.requisition_no === "Draft" ? "" : draftOrder.requisition_no);
+      setRequisitionDate(draftOrder.requisition_date || new Date().toISOString().split("T")[0]);
+      if (draftOrder.project_id) setProjectId(String(draftOrder.project_id));
+      if (draftOrder.remarks) setRemarks(draftOrder.remarks);
+
+      const bomIds = draftOrder.boms.map(b => b.bom_id);
+      setSelectedBomIds(bomIds);
+
+      const restoredBoms = draftOrder.boms.map(bom => {
+        const enriched = {
           ...bom,
-          items: (bom.items || []).map((item, idx) => ({
+          items: (bom.items || []).map(item => ({
             ...item,
-            id: item.product_id || `${id}_${idx}`,
-            name: item.product_name || "",
+            id: item.product_id || `${bom.bom_id}_${item.product_name}`,
+            name: item.product_name,
             sub: item.article_no || "",
-            usualQty: Number(item.qty) || 0,
-            neededQty: Number(item.qty) || 0,
-            pickNos: 0,
-            delivered: false,
+            usualQty: item.qty || 0,
+            neededQty: item.qty || 0,
+            pickNos: item.pick_qty || 0,
+            delivered: item.deliver || false,
+            productId: item.product_id,
+            status: item.status || "original",
+            uom_name: item.uom_name || bom.uom_name,
           })),
         };
-      }).filter(Boolean);
-    });
+        bomsCacheRef.current.set(String(bom.bom_id), enriched);
+        return enriched;
+      });
+      setEnrichedBoms(restoredBoms);
+      setTimeout(() => { isRestoringRef.current = false; }, 100);
+    } else if (!draftOrder) {
+      setSelectedBomIds([]);
+      setEnrichedBoms([]);
+      setRequisitionNo("");
+      setRequisitionDate(new Date().toISOString().split("T")[0]);
+      setProjectId("");
+      setRemarks([]);
+    }
+  }, [draftOrder]);
+
+  // When BOM selection changes manually, update enrichedBoms from cache
+  useEffect(() => {
+    if (isRestoringRef.current) return;
+    const newEnriched = selectedBomIds.map(id => {
+      const cached = bomsCacheRef.current.get(String(id));
+      if (cached) return cached;
+      const bom = bomList.find(b => b.bom_id === id);
+      if (!bom) return null;
+      const fresh = {
+        ...bom,
+        items: (bom.items || []).map((item, idx) => ({
+          ...item,
+          id: item.product_id || `${id}_${idx}`,
+          name: item.product_name || "",
+          sub: item.article_no || "",
+          usualQty: Number(item.qty) || 0,
+          neededQty: Number(item.qty) || 0,
+          pickNos: 0,
+          delivered: false,
+          productId: item.product_id,
+          status: "original",
+        })),
+      };
+      bomsCacheRef.current.set(String(id), fresh);
+      return fresh;
+    }).filter(Boolean);
+    setEnrichedBoms(newEnriched);
   }, [selectedBomIds, bomList]);
 
-  /* ==========================
-     ITEM UPDATE
-  ========================== */
+  // Update cache whenever enrichedBoms changes
+  useEffect(() => {
+    enrichedBoms.forEach(bom => {
+      bomsCacheRef.current.set(String(bom.bom_id), bom);
+    });
+  }, [enrichedBoms]);
+
+  // Handlers (unchanged from original)
   const handleItemUpdate = (bomId, itemId, updates) => {
     setEnrichedBoms((prev) =>
       prev.map((bom) =>
@@ -373,9 +738,92 @@ export default function OrderAddPage() {
     );
   };
 
-  /* ==========================
-     REMARKS
-  ========================== */
+  const handleRemoveBomItem = (bomId, itemId) => {
+    setEnrichedBoms((prev) =>
+      prev.map((bom) =>
+        bom.bom_id === bomId
+          ? { ...bom, items: bom.items.filter((item) => item.id !== itemId) }
+          : bom
+      )
+    );
+  };
+
+  const handleRemoveBom = (bomId) => {
+    setEnrichedBoms((prev) => prev.filter((bom) => bom.bom_id !== bomId));
+    setSelectedBomIds((prev) => prev.filter((id) => id !== bomId));
+    bomsCacheRef.current.delete(String(bomId));
+  };
+
+const handleSwapBomItem = (bomId, itemId, newProductId) => {
+  const newProduct = productList.find(p => p.id === newProductId);
+  if (!newProduct) return;
+
+  setEnrichedBoms(prev =>
+    prev.map(bom =>
+      bom.bom_id === bomId
+        ? {
+            ...bom,
+            items: bom.items.map(item =>
+              item.id === itemId
+                ? {
+                    ...item,
+                    productId: newProduct.id,
+                    product_id: newProduct.id,
+                    name: newProduct.product_name,
+                    sub: newProduct.article_no || "",
+                    usualQty: 1,
+                    status: "swapped",
+                  }
+                : item
+            )
+          }
+        : bom
+    )
+  );
+};
+
+  const handleCopyBomItem = (bomId, itemId) => {
+    setEnrichedBoms(prev =>
+      prev.map(bom => {
+        if (bom.bom_id !== bomId) return bom;
+        const itemToCopy = bom.items.find(i => i.id === itemId);
+        if (!itemToCopy) return bom;
+        const newItem = {
+          ...itemToCopy,
+          id: `${bomId}_copy_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+          pickNos: 0,
+          delivered: false,
+          status: "added",
+        };
+        return { ...bom, items: [...bom.items, newItem] };
+      })
+    );
+  };
+
+  const handleAddProductToBom = (bomId, product) => {
+    // console.log("yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", product )
+    const newItem = {
+      id: `${bomId}_new_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+      productId: product.id,              // ✅ MAIN FIELD
+      item_product_id: product.id,        // ✅ BACKWARD COMPAT (important)
+      product_id: product.id,
+      name: product.product_name,
+      sub: product.article_no || "",
+      usualQty: 1,
+      neededQty: 1,
+      pickNos: 0,
+      delivered: false,
+      status: "added",
+    };
+    setEnrichedBoms((prev) =>
+      prev.map((bom) =>
+        bom.bom_id === bomId
+          ? { ...bom, items: [...bom.items, newItem] }
+          : bom
+      )
+    );
+  };
+
   const handleAddRemark = () => {
     if (remarkText.trim()) {
       setRemarks([...remarks, remarkText.trim()]);
@@ -384,30 +832,63 @@ export default function OrderAddPage() {
     }
   };
 
-  /* ==========================
-     VALIDATION
-  ========================== */
   const isValid = requisitionDate && selectedBomIds.length > 0;
 
-  /* ==========================
-     BUILD PAYLOAD & SAVE
-  ========================== */
-  const handleCreateOrder = async () => {
+  const handleSaveAsDraft = () => {
     const selectedProject = projects.find((p) => p.id === projectId);
+    const bomsForDraft = enrichedBoms.map((bom) => ({
+      bom_id: bom.bom_id,
+      bom_name: bom.bom_name,
+      product_name: bom.product_name,
+      uom_name: bom.uom_name,
+      status: bom.status,
+      items: bom.items.map((item) => ({
+        product_id: item.product_id || item.item_product_id,
+        product_name: item.name,
+        article_no: item.sub,
+        qty: item.neededQty,
+        pick_qty: item.pickNos,
+        deliver: item.pickNos > 0,
+        uom_name: item.uom_name || bom.uom_name,
+        status: item.status,
+      })),
+    }));
+    dispatch(
+      updateDraftOrder({
+        requisition_no: requisitionNo || "Draft",
+        requisition_date: requisitionDate,
+        project_id: projectId ? Number(projectId) : 1,
+        project_name: selectedProject?.project_name || "",
+        remarks: remarks,
+        boms: bomsForDraft,
+      })
+    );
+  };
 
+  const handleCreateRequisition = async () => {
+    const selectedProject = projects.find((p) => p.id === projectId);
+    const bomsForSubmit = enrichedBoms
+      .map((bom) => ({
+        bom_id: bom.bom_id,
+        items: bom.items
+          .filter((item) => item.pickNos > 0)
+          .map((item) => ({
+            product_id: item.product_id || item.item_product_id || item.productId,
+            qty: item.neededQty,
+            pick_qty: item.pickNos,
+            deliver: true,
+            item_status: item.status,
+          })),
+      }))
+      .filter((bom) => bom.items.length > 0);
     const payload = {
       project_id: projectId ? Number(projectId) : 1,
       requisition_date: requisitionDate,
-      boms: enrichedBoms.map((bom) => ({
-        bom_id: bom.bom_id,
-        items: bom.items.map((item) => ({
-          product_id: item.id,
-          qty: item.neededQty,
-          pick_qty: item.pickNos,
-        })),
-      })),
+      requisition_no: requisitionNo || undefined,
+      remarks: remarks.length > 0 ? remarks : undefined,
+      order_status: 1,
+      boms: bomsForSubmit,
     };
-
     const res = await createOrder(payload);
     if (res?.success) {
       dispatch(appendOrder({
@@ -417,61 +898,24 @@ export default function OrderAddPage() {
         project_name: selectedProject?.project_name || "",
         status: "1",
         created_at: new Date().toISOString().replace("T", " ").slice(0, 19),
-        boms: enrichedBoms.map((bom) => ({
+        boms: bomsForSubmit.map((bom) => ({
           bom_id: bom.bom_id,
-          items: bom.items.map((item) => ({
-            product_id: item.id,
-            product_name: item.name,
-            qty: String(item.neededQty),
-          })),
+          items: bom.items,
         })),
       }));
+      dispatch(clearDraftOrder());
       navigate(`/orders/${res.data?.id || ""}`);
     }
   };
 
+  // JSX (unchanged)
   return (
     <div className="flex flex-col h-full overflow-hidden bg-white">
-
-      {/* ── Top action bar ── */}
-      {/* <div className="bg-white border-b border-gray-200 px-2 sm:px-4 py-1.5 flex items-center gap-0.5 flex-shrink-0 overflow-x-auto">
-        <button
-          type="button"
-          onClick={() => {
-            if (window.confirm("Cancel? All changes will be lost.")) navigate("/orders");
-          }}
-          className="flex items-center gap-1.5 text-xs text-[#e04c4c] hover:bg-red-50 px-2.5 py-1.5 rounded transition-colors whitespace-nowrap"
-        >
-          <XCircle size={13} /> Cancel
-        </button>
-        <div className="w-px h-4 bg-gray-200 mx-0.5 flex-shrink-0" />
-        <button type="button" className="flex items-center gap-1.5 text-xs text-gray-600 hover:bg-gray-100 px-2.5 py-1.5 rounded transition-colors whitespace-nowrap">
-          <Paperclip size={13} /> Attachments
-        </button>
-        <button type="button" className="flex items-center gap-1.5 text-xs text-gray-600 hover:bg-gray-100 px-2.5 py-1.5 rounded transition-colors whitespace-nowrap">
-          <Copy size={13} /> Copy
-        </button>
-        <button type="button" className="flex items-center gap-1.5 text-xs text-gray-600 hover:bg-gray-100 px-2.5 py-1.5 rounded transition-colors whitespace-nowrap">
-          <Printer size={13} /> Print <ChevronDown size={10} className="text-gray-400" />
-        </button>
-        <button type="button" className="flex items-center gap-1.5 text-xs text-gray-600 hover:bg-gray-100 px-2.5 py-1.5 rounded transition-colors whitespace-nowrap">
-          <Mail size={13} /> Email <ChevronDown size={10} className="text-gray-400" />
-        </button>
-        <div className="flex-1" />
-        <div className="flex items-center gap-1.5 text-xs text-gray-400 font-medium pr-2 whitespace-nowrap">
-          <div className="w-2 h-2 rounded-full bg-amber-400" /> Draft - Not saved
-        </div>
-      </div> */}
-
-      {/* ── Scrollable body ── */}
       <div className="flex-1 overflow-y-auto">
-
-        {/* ── Header fields ── */}
+        {/* Header fields */}
         <div className="px-4 sm:px-6 pt-5 pb-4 border-b border-gray-200">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-8 gap-y-4">
-
-            {/* Requisition No */}
-            <div>
+            {/* <div>
               <p className="text-xs text-gray-400 mb-0.5">Requisition No</p>
               <input
                 type="text"
@@ -480,9 +924,7 @@ export default function OrderAddPage() {
                 placeholder="REQ-2026-0001"
                 className="text-sm text-gray-800 bg-transparent focus:outline-none w-full placeholder-gray-300 border-b border-transparent focus:border-[#017e84] hover:border-gray-300 transition-colors pb-0.5"
               />
-            </div>
-
-            {/* Requisition Date */}
+            </div> */}
             <div>
               <p className="text-xs text-gray-400 mb-0.5">Requisition Date *</p>
               <input
@@ -492,8 +934,6 @@ export default function OrderAddPage() {
                 className="text-sm text-gray-800 bg-transparent focus:outline-none w-full border-b border-transparent focus:border-[#017e84] hover:border-gray-300 transition-colors pb-0.5"
               />
             </div>
-
-            {/* Project No — now a proper dropdown */}
             <div>
               <p className="text-xs text-gray-400 mb-0.5">Project No</p>
               <select
@@ -502,27 +942,21 @@ export default function OrderAddPage() {
                 disabled={projectsLoading}
                 className="text-sm text-gray-800 bg-transparent focus:outline-none w-full border-b border-transparent focus:border-[#017e84] hover:border-gray-300 transition-colors pb-0.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <option value="">
-                  {projectsLoading ? "Loading projects…" : "Select project…"}
-                </option>
+                <option value="">{projectsLoading ? "Loading projects…" : "Select project…"}</option>
                 {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.project_name}  {p.partner_name}
-                  </option>
+                  <option key={p.id} value={p.id}>{p.project_name}  {p.partner_name}</option>
                 ))}
               </select>
             </div>
-
           </div>
           <button type="button" className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 mt-3">
             <Settings size={12} /> Manage
           </button>
         </div>
 
-        {/* ── Remarks + BOM selector ── */}
+        {/* Remarks + BOM selector */}
         <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
           <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-6">
-
             <div className="flex-1 min-w-0 w-full">
               <p className="text-sm font-semibold text-gray-800 mb-2">Remarks</p>
               <div className="flex items-center gap-2 flex-wrap">
@@ -550,9 +984,7 @@ export default function OrderAddPage() {
                 )}
               </div>
             </div>
-
             <div className="hidden sm:block w-px self-stretch bg-gray-200 flex-shrink-0" />
-
             <div className="flex-shrink-0 w-full sm:w-[20vw]">
               <p className="text-sm font-semibold text-gray-800 mb-2">Component Group (BOM)</p>
               <BomDropdown
@@ -563,46 +995,55 @@ export default function OrderAddPage() {
               />
             </div>
           </div>
-
-          <div className="flex items-center justify-end mt-4">
+          <div className="flex items-center justify-end gap-3 mt-4 flex-wrap">
             <button
               type="button"
-              onClick={handleCreateOrder}
+              onClick={handleSaveAsDraft}
+              disabled={!isValid || saving}
+              className="w-full sm:w-auto px-5 py-2 font-semibold text-sm rounded transition-colors bg-gray-600 hover:bg-gray-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Save as Draft
+            </button>
+            <button
+              type="button"
+              onClick={handleCreateRequisition}
               disabled={!isValid || saving}
               className={`w-full sm:w-auto px-5 py-2 font-semibold text-sm rounded transition-colors
                 ${isValid && !saving ? "bg-[#017e84] hover:bg-[#015f64] text-white" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}
             >
-              {saving ? "Creating…" : "Create Order"}
+              {saving ? "Creating…" : "Create Requisition"}
             </button>
+            {draftOrder && (
+              <button
+                type="button"
+                onClick={() => navigate("/requisitions/pickup")}
+                className="w-full sm:w-auto px-5 py-2 font-semibold text-sm rounded transition-colors border border-[#017e84] text-[#017e84] hover:bg-[#f0fafa]"
+                title="View your current draft pickup list"
+              >
+                View Draft
+              </button>
+            )}
           </div>
         </div>
 
-        {/* ── Overview ── */}
-        <div className="px-4 sm:px-6 pt-4 pb-2">
+        {/* Overview table with BOMs */}
+        <div className="px-4 sm:px-6 pt-4 pb-8">
           <div className="flex items-center justify-between mb-3">
             <p className="text-base font-semibold text-gray-800">Overview</p>
-            <div className="flex items-center gap-2 text-xs text-gray-500">
-              <span>Show raw materials</span>
-              <button type="button" onClick={() => setShowRawMaterials((p) => !p)}
-                className={`relative inline-flex w-9 h-5 rounded-full transition-colors ${showRawMaterials ? "bg-[#017e84]" : "bg-gray-200"}`}>
-                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${showRawMaterials ? "translate-x-4" : "translate-x-0.5"}`} />
-              </button>
+            <div className="flex items-center gap-4">
+              {/* <div className="flex items-center gap-2 text-xs text-gray-500">
+                <span>Show raw materials</span>
+                <button type="button" onClick={() => setShowRawMaterials((p) => !p)}
+                  className={`relative inline-flex w-9 h-5 rounded-full transition-colors ${showRawMaterials ? "bg-[#017e84]" : "bg-gray-200"}`}>
+                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${showRawMaterials ? "translate-x-4" : "translate-x-0.5"}`} />
+                </button>
+              </div> */}
             </div>
           </div>
 
-          <div className="border border-gray-200 rounded overflow-hidden overflow-x-auto">
-            {enrichedBoms.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-gray-400 select-none">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" className="mb-3">
-                  <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
-                </svg>
-                <p className="text-sm text-gray-500 text-center px-4">Select a component group to view its items</p>
-                <p className="text-xs text-gray-400 mt-1 text-center px-4">
-                  Use the <span className="font-medium text-gray-500">Component Group (BOM)</span> dropdown above
-                </p>
-              </div>
-            ) : (
-              <table className="w-full min-w-[1000px]">
+          <div className="border border-gray-200 rounded overflow-visible">
+            <div className="overflow-x-auto overflow-y-visible">
+              <table className="w-full min-w-[1050px]">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
                     <th className="w-10" />
@@ -612,7 +1053,7 @@ export default function OrderAddPage() {
                     <th className="text-right text-xs font-medium text-gray-500 py-2 px-3 w-28">Pick NOS</th>
                     <th className="text-right text-xs font-medium text-gray-500 py-2 px-3 w-28">Remaining NOS</th>
                     <th className="text-right text-xs font-medium text-gray-500 py-2 px-3 w-24">Status</th>
-                    <th className="text-center text-xs font-medium text-gray-500 py-2 px-3 w-12">Mark</th>
+                    <th className="text-center text-xs font-medium text-gray-500 py-2 px-3 w-10">Mark</th>
                     <th className="w-8" />
                   </tr>
                 </thead>
@@ -622,16 +1063,19 @@ export default function OrderAddPage() {
                       key={bom.bom_id}
                       bom={bom}
                       onItemUpdate={(itemId, updates) => handleItemUpdate(bom.bom_id, itemId, updates)}
+                      onSwapItem={(itemId, newProductId) => handleSwapBomItem(bom.bom_id, itemId, newProductId)}
+                      onCopyItem={(itemId) => handleCopyBomItem(bom.bom_id, itemId)}
+                      onRemoveItem={(itemId) => handleRemoveBomItem(bom.bom_id, itemId)}
+                      onAddProductToBom={handleAddProductToBom}
+                      onRemoveBom={handleRemoveBom}
+                      productList={productList}
+                      productLoading={productLoading}
                     />
                   ))}
                 </tbody>
               </table>
-            )}
+            </div>
           </div>
-
-          {/* <button type="button" className="flex items-center gap-1 text-xs text-[#017e84] hover:underline mt-3 mb-6">
-            <Plus size={12} /> Add another finished product
-          </button> */}
         </div>
       </div>
     </div>

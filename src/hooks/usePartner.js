@@ -11,15 +11,15 @@ const usePartner = () => {
   /* ==========================
      GET ALL PARTNERS
   ========================== */
-  const getPartners = async () => {
+  const getPartners = async (payload) => {
     setLoading(true);
     setError(null);
 
     try {
-      const response = await baseClient.get(APIEndpoints.getPartners);
+      const response = await baseClient.post(APIEndpoints.getPartners, payload);
 
       if (response.data?.status === true) {
-        return { success: true, data: response.data.data };
+        return { success: true, data: response.data.data, pagination: response.data.pagination };
       }
 
       throw new Error(response.data?.message || "Failed to fetch partners");
@@ -73,9 +73,9 @@ const usePartner = () => {
     setError(null);
 
     try {
-      const response = await baseClient.put(
-        `${APIEndpoints.updatePartner}/${id}`,
-        payload
+      const response = await baseClient.post(
+        APIEndpoints.updatePartner ,
+        { ...payload , id }
       );
 
       if (response.data?.status === true) {
@@ -105,8 +105,9 @@ const usePartner = () => {
     setError(null);
 
     try {
-      const response = await baseClient.delete(
-        `${APIEndpoints.deletePartner}/${id}`
+      const response = await baseClient.post(
+        APIEndpoints.deletePartner ,
+        { id }
       );
 
       if (response.data?.status === true) {

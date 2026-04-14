@@ -1,5 +1,5 @@
 export const APIEndpoints = {
-  logIn: "/login",
+  logIn: "/auth/login",
 
   getProducts: "/product/list",
 
@@ -32,7 +32,14 @@ deleteProductCategory: "/product/category/delete",
   getOrderById:"/mrn/view",
 
   getPartners:"/partner/list",
+  deletePartner:'/partner/delete',
+  updatePartner:'/partner/update',
+  createPartner: '/partner/add',
+
   getProjects:"/project/list",
+  createProject:'/project/add',
+  updateProject:'/project/update',
+  deleteProject:'/project/delete',
 
   getManufactures:'/manufacturer/list',
   createManufacture:'/manufacturer/add',

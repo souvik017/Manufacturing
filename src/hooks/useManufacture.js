@@ -26,15 +26,16 @@ const useManufacture = () => {
   /* ==========================
      GET ALL MANUFACTURERS
   ========================== */
-  const getManufacturers = useCallback(async (params = {}) => {
+  const getManufacturers = useCallback(async (payload) => {
     setLoading(true);
     setError(null);
 
     try {
-      const response = await baseClient.get(APIEndpoints.getManufactures, { params });
+      const response = await baseClient.get(APIEndpoints.getManufactures, payload);
 
       if (response.data?.status === true) {
         const data = response.data.data;
+        const pagination = response.data.pagination;
         setManufacturers(data);
         return { success: true, data: data };
       }

@@ -12,13 +12,13 @@ const useProduct = () => {
   /* ==========================
      GET ALL PRODUCTS
   ========================== */
-  const getProducts = async () => {
+  const getProducts = async (payload) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await baseClient.get(APIEndpoints.getProducts);
+      const response = await baseClient.post (APIEndpoints.getProducts , payload);
       if (response.data?.status === true) {
-        return { success: true, data: response.data.data };
+        return { success: true, data: response.data.data , pagination: response.data.pagination };
       }
       throw new Error(response.data?.message || "Failed to fetch products");
     } catch (err) {
@@ -34,13 +34,13 @@ const useProduct = () => {
   /* ==========================
      GET PRODUCT TYPES
   ========================== */
-  const getProductTypes = async () => {
+  const getProductTypes = async (payload) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await baseClient.get(APIEndpoints.getProductTypes);
+      const response = await baseClient.post(APIEndpoints.getProductTypes , payload);
       if (response.data?.status === true) {
-        return { success: true, data: response.data.data };
+        return { success: true, data: response.data.data , pagination: response.data.pagination };
       }
       throw new Error(response.data?.message || "Failed to fetch product types");
     } catch (err) {
@@ -56,13 +56,13 @@ const useProduct = () => {
   /* ==========================
      GET PRODUCT CATEGORIES
   ========================== */
-  const getProductCategories = async () => {
+  const getProductCategories = async (payload) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await baseClient.get(APIEndpoints.getProductCategories);
+      const response = await baseClient.post(APIEndpoints.getProductCategories , payload);
       if (response.data?.status === true) {
-        return { success: true, data: response.data.data };
+        return { success: true, data: response.data.data, pagination: response.data.pagination };
       }
       throw new Error(response.data?.message || "Failed to fetch categories");
     } catch (err) {

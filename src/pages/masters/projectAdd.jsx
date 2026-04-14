@@ -1,141 +1,256 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+// pages/masters/ProjectNumberForm.jsx
+import { useState, useEffect, useRef } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { ChevronDown, Search, X } from "lucide-react";
+import useProject from "../../hooks/useProject";
+import usePartner from "../../hooks/usePartner";
 
-const STORAGE_KEY = "projectNumbers";
-const PARTNERS_KEY = "partners";
+// ── Searchable Dropdown ────────────────────────────────────────
+function SearchableSelect({ options = [], value, onChange, placeholder = "Select", disabled }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const containerRef = useRef(null);
+  const inputRef = useRef(null);
 
-const generateId = () =>
-  `proj_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+  const selected = options.find((o) => String(o.value) === String(value));
 
-const loadPartners = () => {
-  const stored = localStorage.getItem(PARTNERS_KEY);
-  if (stored) {
-    try {
-      return JSON.parse(stored);
-    } catch {
-      return [];
-    }
-  }
-  return [];
-};
+  const filtered = query.trim()
+    ? options.filter((o) => o.label.toLowerCase().includes(query.toLowerCase()))
+    : options;
 
-export default function ProjectNumberForm() {
-  const navigate = useNavigate();
-
-  const [partners, setPartners] = useState(loadPartners);
-  const [form, setForm] = useState({
-    projectNo: "",
-    partnerId: "",
-    endUserId: "",
-  });
-
+  // Close on outside click
   useEffect(() => {
-    const handleStorageChange = () => setPartners(loadPartners());
-    window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
+    const handler = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false);
+        setQuery("");
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+  const handleOpen = () => {
+    if (disabled) return;
+    setOpen(true);
+    setTimeout(() => inputRef.current?.focus(), 0);
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!form.projectNo.trim() || !form.partnerId || !form.endUserId) return;
+  const handleSelect = (option) => {
+    onChange(option.value);
+    setOpen(false);
+    setQuery("");
+  };
 
-    const newProject = {
-      id: generateId(),
-      projectNo: form.projectNo.trim(),
-      partnerId: form.partnerId,
-      endUserId: form.endUserId,
+  const handleClear = (e) => {
+    e.stopPropagation();
+    onChange("");
+    setQuery("");
+  };
+
+  return (
+    <div ref={containerRef} className="relative">
+      {/* Trigger */}
+      <button
+        type="button"
+        onClick={handleOpen}
+        disabled={disabled}
+        className={`w-full border rounded-md px-3 py-2 text-sm text-left flex items-center justify-between gap-2 transition
+          focus:outline-none focus:ring-2 focus:ring-[#017e84] focus:border-[#017e84]
+          disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed
+          ${open ? "border-[#017e84] ring-2 ring-[#017e84]" : "border-gray-300"}
+          ${!selected ? "text-gray-400" : "text-gray-900"}`}
+      >
+        <span className="truncate">{selected ? selected.label : placeholder}</span>
+        <span className="flex items-center gap-1 shrink-0">
+          {selected && !disabled && (
+            <X
+              size={14}
+              className="text-gray-400 hover:text-gray-600"
+              onClick={handleClear}
+            />
+          )}
+          <ChevronDown
+            size={15}
+            className={`text-gray-400 transition-transform ${open ? "rotate-180" : ""}`}
+          />
+        </span>
+      </button>
+
+      {/* Dropdown */}
+      {open && (
+        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg">
+          {/* Search input */}
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100">
+            <Search size={14} className="text-gray-400 shrink-0" />
+            <input
+              ref={inputRef}
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search…"
+              className="w-full text-sm outline-none placeholder-gray-400"
+            />
+          </div>
+
+          {/* Options */}
+          <ul className="max-h-48 overflow-y-auto py-1">
+            {filtered.length === 0 ? (
+              <li className="px-3 py-2 text-sm text-gray-400 text-center">No results</li>
+            ) : (
+              filtered.map((option) => (
+                <li
+                  key={option.value}
+                  onClick={() => handleSelect(option)}
+                  className={`px-3 py-2 text-sm cursor-pointer transition-colors
+                    ${String(value) === String(option.value)
+                      ? "bg-[#017e84] text-white"
+                      : "text-gray-700 hover:bg-gray-50"
+                    }`}
+                >
+                  {option.label}
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main Form ──────────────────────────────────────────────────
+export default function ProjectNumberForm() {
+  const navigate = useNavigate();
+  const { id } = useParams();
+  const isEdit = Boolean(id);
+
+  const { getProjects, createProject, updateProject, loading } = useProject();
+  const { getPartners, loading: partnersLoading } = usePartner();
+
+  const [partnerOptions, setPartnerOptions] = useState([]);
+  const [form, setForm] = useState({
+    project_name: "",
+    partner_id: "",
+  });
+
+  // ── Fetch partners for dropdown ──────────────────────────────
+  useEffect(() => {
+    const fetchPartners = async () => {
+      const result = await getPartners();
+      if (result.success) {
+        setPartnerOptions(
+          result.data.map((p) => ({
+            value: p.id,
+            label: `${p.partner_code} — ${p.partner_name}`,
+          }))
+        );
+      }
+    };
+    fetchPartners();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Prefill form when editing ────────────────────────────────
+  useEffect(() => {
+    if (!isEdit) return;
+    const fetchAndPrefill = async () => {
+      const result = await getProjects();
+      if (result.success) {
+        const match = result.data.find((p) => String(p.id) === String(id));
+        if (match) {
+          setForm({
+            project_name: match.project_name ?? "",
+            partner_id: match.partner_id ?? "",
+          });
+        }
+      }
+    };
+    fetchAndPrefill();
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Submit ───────────────────────────────────────────────────
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    const payload = {
+      project_name: form.project_name.trim(),
+      partner_id: Number(form.partner_id),
     };
 
-    const stored = localStorage.getItem(STORAGE_KEY);
-    const projects = stored ? JSON.parse(stored) : [];
+    const result = isEdit
+      ? await updateProject(id, payload)
+      : await createProject(payload);
 
-    projects.push(newProject);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
-
-    navigate("/masters/project-numbers");
+    if (result.success) navigate("/masters/project");
   };
 
   const inputClass =
-    "w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#017e84] focus:border-[#017e84] transition";
+    "w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#017e84] focus:border-[#017e84] transition disabled:bg-gray-50 disabled:text-gray-400";
+
+  const isSubmitting = loading;
 
   return (
     <div className="p-4 sm:p-6 bg-gray-50 min-h-screen">
       <div className="max-w-6xl mx-auto bg-white rounded-lg shadow-sm border border-gray-200">
-        
+
         {/* Header */}
         <div className="border-b px-6 py-4">
           <h1 className="text-xl font-semibold text-gray-800">
-            Add Project Number
+            {isEdit ? "Edit Project Number" : "Add Project Number"}
           </h1>
         </div>
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-
-          {/* 3 Column Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
 
-            {/* Project No */}
+            {/* Project Name */}
             <div>
               <label className="block text-sm font-medium text-gray-600 mb-1">
-                Project No *
+                Project Name <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
-                name="projectNo"
-                value={form.projectNo}
-                onChange={handleChange}
+                name="project_name"
+                value={form.project_name}
+                onChange={(e) => setForm((prev) => ({ ...prev, project_name: e.target.value }))}
                 required
+                disabled={isSubmitting}
+                placeholder="e.g. 209999-TEST"
                 className={inputClass}
-                placeholder="Enter project number"
               />
             </div>
 
-            {/* Partner */}
+            {/* Partner — searchable dropdown */}
             <div>
               <label className="block text-sm font-medium text-gray-600 mb-1">
-                Partner *
+                Partner <span className="text-red-500">*</span>
               </label>
-              <select
-                name="partnerId"
-                value={form.partnerId}
-                onChange={handleChange}
+              {partnersLoading && partnerOptions.length === 0 ? (
+                <div className="h-9 bg-gray-100 rounded-md animate-pulse" />
+              ) : (
+                <SearchableSelect
+                  options={partnerOptions}
+                  value={form.partner_id}
+                  onChange={(val) => setForm((prev) => ({ ...prev, partner_id: val }))}
+                  placeholder="Select partner"
+                  disabled={isSubmitting}
+                />
+              )}
+              {/* Hidden required guard */}
+              <input
+                type="text"
                 required
-                className={inputClass}
-              >
-                <option value="">Select</option>
-                {partners.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+                value={form.partner_id}
+                onChange={() => {}}
+                className="sr-only"
+                tabIndex={-1}
+                aria-hidden
+              />
             </div>
 
-            {/* End User */}
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1">
-                End User *
-              </label>
-              <select
-                name="endUserId"
-                value={form.endUserId}
-                onChange={handleChange}
-                required
-                className={inputClass}
-              >
-                <option value="">Select</option>
-                {partners.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* Empty slot */}
+            <div className="hidden lg:block" />
 
           </div>
 
@@ -144,16 +259,19 @@ export default function ProjectNumberForm() {
             <button
               type="button"
               onClick={() => navigate("/masters/project-numbers")}
-              className="px-4 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-100 transition"
+              disabled={isSubmitting}
+              className="px-4 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50 transition"
             >
               Cancel
             </button>
-
             <button
               type="submit"
-              className="px-5 py-2 text-sm bg-[#017e84] text-white rounded-md hover:bg-[#01656a] shadow-sm transition"
+              disabled={isSubmitting || !form.partner_id}
+              className="px-5 py-2 text-sm bg-[#017e84] text-white rounded-md hover:bg-[#01656a] shadow-sm disabled:opacity-50 transition"
             >
-              Save Project
+              {isSubmitting
+                ? isEdit ? "Updating…" : "Saving…"
+                : isEdit ? "Update Project" : "Save Project"}
             </button>
           </div>
         </form>

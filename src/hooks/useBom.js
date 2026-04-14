@@ -12,19 +12,21 @@ const useBom = () => {
   /* ==========================
      GET ALL BOM
   ========================== */
-  const getBoms = async (bom_name = "") => {
+  const getBoms = async (payload ,bom_name = "") => {
     setLoading(true);
     setError(null);
 
     try {
       const response = await baseClient.get(APIEndpoints.getBoms, {
         data: { bom_name },
+        ...payload
       });
 
       if (response.data?.status === true) {
         return {
           success: true,
           data: response.data.data,
+          pagination: response.data.pagination
         };
       }
 
@@ -91,9 +93,9 @@ const createBom = async (payload) => {
     setError(null);
 
     try {
-      const response = await baseClient.put(
-        `${APIEndpoints.updateBom}/${id}`,
-        payload
+      const response = await baseClient.post(
+        APIEndpoints.updateBom,
+      {...payload , bom_id : id , product_id:1}
       );
 
       if (response.data?.status === true) {
@@ -125,8 +127,8 @@ const createBom = async (payload) => {
     setError(null);
 
     try {
-      const response = await baseClient.delete(
-        `${APIEndpoints.deleteBom}/${id}`
+      const response = await baseClient.post(
+        APIEndpoints.deleteBom , {bom_id:id}
       );
 
       if (response.data?.status === true) {

@@ -1,4 +1,3 @@
-// pages/masters/ProductTypeForm.jsx
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Loader2 } from "lucide-react";
@@ -20,13 +19,21 @@ export default function ProductTypeForm() {
     (async () => {
       setFetching(true);
       const result = await getProductTypes();
+      console.log("getProductTypes result:", result); // Debug: see structure
       if (result.success) {
-        const type = result.data.find((t) => String(t.id) === String(id));
+        // Normalize data array (might be result.data or result.data.data)
+        let dataArray = result.data;
+        if (!Array.isArray(dataArray) && dataArray?.data) dataArray = dataArray.data;
+        const type = dataArray?.find((t) => String(t.id) === String(id));
         if (type) {
-          setName(type.type_name ?? type.name ?? "");
+          // Determine the name field dynamically
+          const nameValue = type.item_type_name || type.type_name || type.name || "";
+          setName(nameValue);
         } else {
-          navigate("/masters/producttypes");
+          navigate("/masters/producttype");
         }
+      } else {
+        navigate("/masters/producttype");
       }
       setFetching(false);
     })();
@@ -37,8 +44,7 @@ export default function ProductTypeForm() {
     e.preventDefault();
     if (!name.trim()) return;
 
-    // Adjust the payload key to match what your API expects
-    const payload = { item_type_name: name.trim()  , status : 1 };
+    const payload = { item_type_name: name.trim(), status: 1 };
     let result;
 
     if (isEdit) {
@@ -55,7 +61,6 @@ export default function ProductTypeForm() {
   const inputClass =
     "w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#017e84] focus:border-[#017e84] transition disabled:bg-gray-100 disabled:cursor-not-allowed";
 
-  // ── Loading skeleton ─────────────────────────────────────────
   if (fetching) {
     return (
       <div className="p-4 sm:p-6 bg-gray-50 min-h-screen">
@@ -75,17 +80,14 @@ export default function ProductTypeForm() {
   return (
     <div className="p-4 sm:p-6 bg-gray-50 min-h-screen">
       <div className="max-w-3xl mx-auto bg-white rounded-lg shadow-sm border border-gray-200">
-        {/* Header */}
         <div className="border-b px-6 py-4">
           <h1 className="text-xl font-semibold text-gray-800">
             {isEdit ? "Edit Product Type" : "Add Product Type"}
           </h1>
         </div>
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            {/* Type Name */}
             <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-gray-600 mb-1">
                 Type Name <span className="text-red-500">*</span>
@@ -102,11 +104,10 @@ export default function ProductTypeForm() {
             </div>
           </div>
 
-          {/* Buttons */}
           <div className="flex justify-end gap-3 pt-4 border-t">
             <button
               type="button"
-              onClick={() => navigate("/masters/producttypes")}
+              onClick={() => navigate("/masters/producttype")}
               disabled={loading}
               className="px-4 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50 transition"
             >
