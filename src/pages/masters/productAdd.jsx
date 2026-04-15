@@ -4,6 +4,7 @@ import useProduct from "../../hooks/useProduct";
 import useHsn from "../../hooks/useHsn";
 import usePartner from "../../hooks/usePartner";
 import useManufacture from "../../hooks/useManufacture";
+import useUomCategory from "../../hooks/useUomCategory";   // ✅ UOM hook
 
 // ==========================
 // Reusable Searchable Select Component
@@ -142,7 +143,7 @@ const SearchableSelect = ({
 // ==========================
 // Helper: auto-detect display key
 // ==========================
-const getDisplayKey = (item, fallbackKeys = ["name", "partner_name", "category_name", "item_type_name", "manufacturer_name", "hsn_code"]) => {
+const getDisplayKey = (item, fallbackKeys = ["name", "partner_name", "category_name", "item_type_name", "manufacturer_name", "hsn_code", "uom_name"]) => {
   if (!item) return fallbackKeys[0];
   for (let key of fallbackKeys) {
     if (item[key] !== undefined) return key;
@@ -170,6 +171,7 @@ export default function ProductForm() {
   const { getHsns } = useHsn();
   const { getPartners } = usePartner();
   const { getManufacturers } = useManufacture();
+  const { getUomCategories } = useUomCategory();   // ✅ UOM hook
 
   // State
   const [form, setForm] = useState({
@@ -206,16 +208,14 @@ export default function ProductForm() {
     const fetchDropdownData = async () => {
       setLoadingDropdowns(true);
       try {
-        const [catRes, typeRes, hsnRes, partnerRes, manuRes] = await Promise.all([
+        const [catRes, typeRes, hsnRes, partnerRes, manuRes, uomRes] = await Promise.all([
           getProductCategories(),
           getProductTypes(),
           getHsns(),
           getPartners(),
           getManufacturers(),
+          getUomCategories({ page: 1, limit: 100 }),   // ✅ fetch UOMs
         ]);
-
-        console.log("Partners response:", partnerRes);
-        console.log("Manufacturers response:", manuRes);
 
         if (catRes?.success) setCategories(catRes.data || []);
         if (typeRes?.success) setItemTypes(typeRes.data || []);
@@ -223,11 +223,16 @@ export default function ProductForm() {
         if (partnerRes?.success) setPartners(partnerRes.data || []);
         if (manuRes?.success) setManufacturers(manuRes.data || []);
 
-        // UOMs (temporary)
-        setUoms([
-          { id: 1, name: "Nos" },
-          { id: 2, name: "Kg" },
-        ]);
+        // ✅ Map UOM response (API returns { id, uom_name, status })
+        if (uomRes?.success && Array.isArray(uomRes.data)) {
+          const formattedUoms = uomRes.data.map(u => ({
+            id: u.id,
+            name: u.uom_name,
+            uom_name: u.uom_name,
+            status: u.status,
+          }));
+          setUoms(formattedUoms);
+        }
       } catch (err) {
         console.error("Dropdown error:", err);
       } finally {
@@ -255,7 +260,6 @@ export default function ProductForm() {
         if (product) {
           console.log("Fetched product for edit:", product);
 
-          // Helper to find ID by name (for dropdowns that use ID)
           const findIdByName = (list, name, nameKey) => {
             if (!name) return "";
             const item = list.find((item) => item[nameKey] === name);
@@ -266,10 +270,10 @@ export default function ProductForm() {
             product_name: product.product_name || "",
             article_no: product.article_no || "",
             category_id: findIdByName(categories, product.category_name, "category_name"),
-            uom_id: findIdByName(uoms, product.uom_name, "name"),
+            uom_id: findIdByName(uoms, product.uom_name, "uom_name"),
             item_type_id: findIdByName(itemTypes, product.item_type_name, "item_type_name"),
             manufacturer_id: findIdByName(manufacturers, product.manufacturer_name, "manufacturer_name"),
-            partner_name: product.partner_name || "",   // ✅ store the name, not ID
+            partner_name: product.partner_name || "",
             hsn_code: product.hsn_code || "",
             drawing_no: product.drawing_no || "",
           });
@@ -311,7 +315,6 @@ export default function ProductForm() {
     }
   };
 
-  // Map options with auto-detected display key
   const mapOptions = (list, preferredDisplayKey = null) => {
     if (!Array.isArray(list)) return [];
     return list.map((item) => {
@@ -323,9 +326,8 @@ export default function ProductForm() {
     });
   };
 
-  // Determine the correct display key for partners
   const partnerDisplayKey = partners.length > 0 && partners[0].partner_name ? "partner_name" : "name";
-  const partnerValueKey = partnerDisplayKey; // we store the name as value
+  const partnerValueKey = partnerDisplayKey;
 
   return (
     <div className="p-4 sm:p-6 bg-gray-50 min-h-screen">
@@ -374,14 +376,16 @@ export default function ProductForm() {
               displayKey="item_type_name"
             />
 
+            {/* ✅ UOM Dropdown using API data */}
             <SearchableSelect
-              options={mapOptions(uoms, "name")}
+              options={mapOptions(uoms, "uom_name")}
               value={form.uom_id}
               onChange={(val) => handleChange("uom_id", val)}
               placeholder="UOM"
               disabled={loadingDropdowns}
               loading={loadingDropdowns}
-              displayKey="name"
+              displayKey="uom_name"
+              valueKey="id"
             />
 
             <SearchableSelect
@@ -394,7 +398,6 @@ export default function ProductForm() {
               displayKey="manufacturer_name"
             />
 
-            {/* Partner Select - now auto-detects display key */}
             <SearchableSelect
               options={mapOptions(partners, partnerDisplayKey)}
               value={form.partner_name}

@@ -16,9 +16,9 @@ const useProduct = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await baseClient.post (APIEndpoints.getProducts , payload);
+      const response = await baseClient.post(APIEndpoints.getProducts, payload);
       if (response.data?.status === true) {
-        return { success: true, data: response.data.data , pagination: response.data.pagination };
+        return { success: true, data: response.data.data, pagination: response.data.pagination };
       }
       throw new Error(response.data?.message || "Failed to fetch products");
     } catch (err) {
@@ -38,9 +38,9 @@ const useProduct = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await baseClient.post(APIEndpoints.getProductTypes , payload);
+      const response = await baseClient.post(APIEndpoints.getProductTypes, payload);
       if (response.data?.status === true) {
-        return { success: true, data: response.data.data , pagination: response.data.pagination };
+        return { success: true, data: response.data.data, pagination: response.data.pagination };
       }
       throw new Error(response.data?.message || "Failed to fetch product types");
     } catch (err) {
@@ -60,7 +60,7 @@ const useProduct = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await baseClient.post(APIEndpoints.getProductCategories , payload);
+      const response = await baseClient.post(APIEndpoints.getProductCategories, payload);
       if (response.data?.status === true) {
         return { success: true, data: response.data.data, pagination: response.data.pagination };
       }
@@ -105,7 +105,7 @@ const useProduct = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await baseClient.put(APIEndpoints.updateProduct, { ...payload, id });
+      const response = await baseClient.post(APIEndpoints.updateProduct, { ...payload, id });
       if (response.data?.status === true) {
         toast.success(response.data.message || "Product updated");
         const data = response.data.data;
@@ -145,6 +145,39 @@ const useProduct = () => {
     }
   };
 
+  /* ==========================
+     BULK UPLOAD PRODUCTS (CSV)
+  ========================== */
+  const bulkUploadProducts = async (formData) => {
+    setLoading(true);
+    setError(null);
+    try {
+      // Important: For file upload, axios automatically sets Content-Type: multipart/form-data
+      // when FormData is passed. Ensure your baseClient does not override headers.
+      const response = await baseClient.post(APIEndpoints.bulkUploadProducts, formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+      if (response.data?.status === true) {
+        toast.success(response.data.message || "Bulk upload successful");
+        return {
+          success: true,
+          importedCount: response.data.importedCount,
+          message: response.data.message,
+        };
+      }
+      throw new Error(response.data?.message || "Bulk upload failed");
+    } catch (err) {
+      const errMsg = err?.response?.data?.message || err.message || "Bulk upload failed";
+      setError(errMsg);
+      toast.error(errMsg);
+      return { success: false };
+    } finally {
+      setLoading(false);
+    }
+  };
+
   /* ================================
      CREATE PRODUCT CATEGORY
   ================================ */
@@ -175,7 +208,7 @@ const useProduct = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await baseClient.put(APIEndpoints.updateProductCategory, { ...payload, id });
+      const response = await baseClient.post(APIEndpoints.updateProductCategory, { ...payload, id });
       if (response.data?.status === true) {
         toast.success(response.data.message || "Category updated");
         return { success: true, data: response.data.data };
@@ -289,6 +322,7 @@ const useProduct = () => {
     createProduct,
     updateProduct,
     deleteProduct,
+    bulkUploadProducts, // <-- new function
     // Categories
     getProductCategories,
     createProductCategory,

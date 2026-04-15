@@ -3,14 +3,14 @@ import OrderList from "./OrderList";
 import { ClipboardList } from "lucide-react";
 
 export default function OrdersLayout() {
-  const { orderId } = useParams();
+  const { orderId, id } = useParams(); // ✅ capture both param names
   const location = useLocation();
 
   const isAddPage = location.pathname.endsWith("/add");
   const isPickupPage = location.pathname.endsWith("/pickup");
 
-  // Show the Outlet if we have an orderId, are on the add page, or on the pickup page
-  const showOutlet = orderId || isAddPage || isPickupPage;
+  // Show Outlet if we have any ID (orderId or id), or on add/pickup pages
+  const showOutlet = orderId || id || isAddPage || isPickupPage;
 
   return (
     <div className="flex h-full overflow-hidden">

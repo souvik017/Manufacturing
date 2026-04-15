@@ -60,6 +60,7 @@ export default function App() {
         <Route path="requisitions" element={<OrdersLayout />}>
           <Route index element={<OrdersPage />} />
           <Route path="add" element={<OrderAddPage />} />
+          <Route path="draft/edit/:id" element={<OrderAddPage />} />
           <Route path=":orderId" element={<OrderDetailPage />} />
           <Route path=":orderId/bom/:bumId" element={<BumDetailPage />} />
           <Route path="pickup" element={<PickupListPage />} />
@@ -77,6 +78,7 @@ export default function App() {
           <Route path="producttype/edit/:id" element={<ProductTypeForm />} />
           <Route path="uomcategories" element={<UomCategoryList />} />
           <Route path="uomcategories/add" element={<UomCategoryForm />} />
+          <Route path="uomcategories/edit/:id" element={<UomCategoryForm />} />
           <Route path="manufacturers" element={<ManufacturerList />} />
           <Route path="manufacturers/add" element={<ManufacturerForm />} />
           <Route path="manufacturers/edit/:id" element={<ManufacturerForm />} />

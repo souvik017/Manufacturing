@@ -1,8 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import { useDispatch, useSelector } from "react-redux";
-import { updateDraftOrder, appendOrder, clearDraftOrder } from "../redux/Slices/orderSlice";
 import useBom from "../hooks/useBom";
 import useOrders from "../hooks/useOrders";
 import useProject from "../hooks/useProject";
@@ -275,18 +273,18 @@ function ItemRow({ item, onUpdateItem, onSwap, onCopy, onRemove, productList, pr
       <td className="px-2 py-2">
         <p className="text-xs font-semibold text-gray-900 leading-tight">{item.name}</p>
         {item.sub && <p className="text-xs text-gray-500 mt-0.5 truncate max-w-md">{item.sub}</p>}
-      </td>
+       </td>
       <td className="px-3 py-2 w-28 text-right">
         <input type="number" value={item.usualQty} disabled className="w-20 text-right text-sm text-gray-800 bg-gray-100 border-0 rounded px-1 py-0.5 cursor-default" />
-      </td>
+       </td>
       <td className="px-3 py-2 w-28 text-right">
         <input type="number" value={localNeeded} onChange={(e) => setLocalNeeded(e.target.value)} onBlur={handleNeededBlur} onKeyDown={(e) => onKey(e, handleNeededBlur)}
           className="w-20 text-right text-sm text-gray-800 border-0 focus:outline-none focus:ring-1 focus:ring-[#017e84] rounded px-1 py-0.5 bg-transparent hover:bg-gray-100" min="0" step="0.5" />
-      </td>
+       </td>
       <td className="px-3 py-2 w-28 text-right">
         <input type="number" value={localPick} onChange={(e) => setLocalPick(e.target.value)} onBlur={handlePickBlur} onKeyDown={(e) => onKey(e, handlePickBlur)}
           className="w-20 text-right text-sm text-gray-800 border-0 focus:outline-none focus:ring-1 focus:ring-[#017e84] rounded px-1 py-0.5 bg-transparent hover:bg-gray-100" min="0" max={item.neededQty} step="0.5" />
-      </td>
+       </td>
       <td className="px-3 py-2 w-28 text-right text-sm text-gray-700">{remaining}</td>
       <td className="px-3 py-2 w-24 text-right"><StatusBadge status={item.status} /></td>
       <td className="px-2 py-2 w-10 text-center">
@@ -301,7 +299,7 @@ function ItemRow({ item, onUpdateItem, onSwap, onCopy, onRemove, productList, pr
         >
           <Check size={14} strokeWidth={isMarked ? 2.5 : 1.5} />
         </button>
-      </td>
+       </td>
       <td className="px-2 py-2 w-8 text-right relative">
         <div ref={menuButtonRef}>
           <button
@@ -390,7 +388,7 @@ function ItemRow({ item, onUpdateItem, onSwap, onCopy, onRemove, productList, pr
           </div>,
           document.body
         )}
-      </td>
+       </td>
     </tr>
   );
 }
@@ -569,8 +567,8 @@ function BomSection({ bom, onItemUpdate, onSwapItem, onCopyItem, onRemoveItem, o
               )}
             </div>
           </div>
-        </td>
-      </tr>
+         </td>
+       </tr>
       {!collapsed && items.map((item) => (
         <ItemRow
           key={item.id}
@@ -587,16 +585,13 @@ function BomSection({ bom, onItemUpdate, onSwapItem, onCopyItem, onRemoveItem, o
   );
 }
 
-// ─── Main Page (OrderAddPage) with persistent cache and merge support ───────
+// ─── Main Page (OrderAddPage) – Redux draft logic removed ───────────────────
 export default function OrderAddPage() {
   const navigate = useNavigate();
-  const dispatch = useDispatch();
   const { getBoms, loading: bomLoading } = useBom();
   const { createOrder, loading: saving } = useOrders();
   const { getProjects } = useProject();
   const { getProducts, loading: productLoading } = useProduct();
-
-  const draftOrder = useSelector((s) => s.orders?.draftOrder);
 
   const [bomList, setBomList] = useState([]);
   const [selectedBomIds, setSelectedBomIds] = useState([]);
@@ -616,7 +611,6 @@ export default function OrderAddPage() {
   
   // Persistent cache for BOM data (preserves pickNos, etc. even when deselected)
   const bomsCacheRef = useRef(new Map());
-  const isRestoringRef = useRef(false);
 
   // Fetch BOMs once
   useEffect(() => {
@@ -647,53 +641,8 @@ export default function OrderAddPage() {
     fetchProjects();
   }, []);
 
-  // Restore from draft when component mounts or draft changes externally
-  useEffect(() => {
-    if (draftOrder && draftOrder.boms && draftOrder.boms.length > 0) {
-      isRestoringRef.current = true;
-      setRequisitionNo(draftOrder.requisition_no === "Draft" ? "" : draftOrder.requisition_no);
-      setRequisitionDate(draftOrder.requisition_date || new Date().toISOString().split("T")[0]);
-      if (draftOrder.project_id) setProjectId(String(draftOrder.project_id));
-      if (draftOrder.remarks) setRemarks(draftOrder.remarks);
-
-      const bomIds = draftOrder.boms.map(b => b.bom_id);
-      setSelectedBomIds(bomIds);
-
-      const restoredBoms = draftOrder.boms.map(bom => {
-        const enriched = {
-          ...bom,
-          items: (bom.items || []).map(item => ({
-            ...item,
-            id: item.product_id || `${bom.bom_id}_${item.product_name}`,
-            name: item.product_name,
-            sub: item.article_no || "",
-            usualQty: item.qty || 0,
-            neededQty: item.qty || 0,
-            pickNos: item.pick_qty || 0,
-            delivered: item.deliver || false,
-            productId: item.product_id,
-            status: item.status || "original",
-            uom_name: item.uom_name || bom.uom_name,
-          })),
-        };
-        bomsCacheRef.current.set(String(bom.bom_id), enriched);
-        return enriched;
-      });
-      setEnrichedBoms(restoredBoms);
-      setTimeout(() => { isRestoringRef.current = false; }, 100);
-    } else if (!draftOrder) {
-      setSelectedBomIds([]);
-      setEnrichedBoms([]);
-      setRequisitionNo("");
-      setRequisitionDate(new Date().toISOString().split("T")[0]);
-      setProjectId("");
-      setRemarks([]);
-    }
-  }, [draftOrder]);
-
   // When BOM selection changes manually, update enrichedBoms from cache
   useEffect(() => {
-    if (isRestoringRef.current) return;
     const newEnriched = selectedBomIds.map(id => {
       const cached = bomsCacheRef.current.get(String(id));
       if (cached) return cached;
@@ -727,7 +676,7 @@ export default function OrderAddPage() {
     });
   }, [enrichedBoms]);
 
-  // Handlers (unchanged from original)
+  // Handlers (unchanged)
   const handleItemUpdate = (bomId, itemId, updates) => {
     setEnrichedBoms((prev) =>
       prev.map((bom) =>
@@ -754,33 +703,33 @@ export default function OrderAddPage() {
     bomsCacheRef.current.delete(String(bomId));
   };
 
-const handleSwapBomItem = (bomId, itemId, newProductId) => {
-  const newProduct = productList.find(p => p.id === newProductId);
-  if (!newProduct) return;
+  const handleSwapBomItem = (bomId, itemId, newProductId) => {
+    const newProduct = productList.find(p => p.id === newProductId);
+    if (!newProduct) return;
 
-  setEnrichedBoms(prev =>
-    prev.map(bom =>
-      bom.bom_id === bomId
-        ? {
-            ...bom,
-            items: bom.items.map(item =>
-              item.id === itemId
-                ? {
-                    ...item,
-                    productId: newProduct.id,
-                    product_id: newProduct.id,
-                    name: newProduct.product_name,
-                    sub: newProduct.article_no || "",
-                    usualQty: 1,
-                    status: "swapped",
-                  }
-                : item
-            )
-          }
-        : bom
-    )
-  );
-};
+    setEnrichedBoms(prev =>
+      prev.map(bom =>
+        bom.bom_id === bomId
+          ? {
+              ...bom,
+              items: bom.items.map(item =>
+                item.id === itemId
+                  ? {
+                      ...item,
+                      productId: newProduct.id,
+                      product_id: newProduct.id,
+                      name: newProduct.product_name,
+                      sub: newProduct.article_no || "",
+                      usualQty: 1,
+                      status: "swapped",
+                    }
+                  : item
+              )
+            }
+          : bom
+      )
+    );
+  };
 
   const handleCopyBomItem = (bomId, itemId) => {
     setEnrichedBoms(prev =>
@@ -801,11 +750,10 @@ const handleSwapBomItem = (bomId, itemId, newProductId) => {
   };
 
   const handleAddProductToBom = (bomId, product) => {
-    // console.log("yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", product )
     const newItem = {
       id: `${bomId}_new_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-      productId: product.id,              // ✅ MAIN FIELD
-      item_product_id: product.id,        // ✅ BACKWARD COMPAT (important)
+      productId: product.id,
+      item_product_id: product.id,
       product_id: product.id,
       name: product.product_name,
       sub: product.article_no || "",
@@ -834,37 +782,49 @@ const handleSwapBomItem = (bomId, itemId, newProductId) => {
 
   const isValid = requisitionDate && selectedBomIds.length > 0;
 
-  const handleSaveAsDraft = () => {
+  // Save as Draft → API call with order_status = 0
+  const handleSaveAsDraft = async () => {
     const selectedProject = projects.find((p) => p.id === projectId);
-    const bomsForDraft = enrichedBoms.map((bom) => ({
-      bom_id: bom.bom_id,
-      bom_name: bom.bom_name,
-      product_name: bom.product_name,
-      uom_name: bom.uom_name,
-      status: bom.status,
-      items: bom.items.map((item) => ({
-        product_id: item.product_id || item.item_product_id,
-        product_name: item.name,
-        article_no: item.sub,
-        qty: item.neededQty,
-        pick_qty: item.pickNos,
-        deliver: item.pickNos > 0,
-        uom_name: item.uom_name || bom.uom_name,
-        status: item.status,
-      })),
-    }));
-    dispatch(
-      updateDraftOrder({
-        requisition_no: requisitionNo || "Draft",
-        requisition_date: requisitionDate,
-        project_id: projectId ? Number(projectId) : 1,
-        project_name: selectedProject?.project_name || "",
-        remarks: remarks,
-        boms: bomsForDraft,
-      })
-    );
+    const bomsForDraft = enrichedBoms
+      .map((bom) => ({
+        bom_id: bom.bom_id,
+        items: bom.items
+          .filter((item) => item.pickNos > 0)   // only include marked items
+          .map((item) => ({
+            product_id: item.product_id || item.item_product_id || item.productId,
+            qty: item.neededQty,
+            pick_qty: item.pickNos,
+            deliver: true,
+            item_status: item.status,
+          })),
+      }))
+      .filter((bom) => bom.items.length > 0);
+
+    if (bomsForDraft.length === 0) {
+      alert("Please mark at least one item to save as draft.");
+      return;
+    }
+
+    const payload = {
+      project_id: projectId ? Number(projectId) : 1,
+      requisition_date: requisitionDate,
+      requisition_no: requisitionNo || undefined,
+      remarks: remarks.length > 0 ? remarks : undefined,
+      order_status: 0,   // Draft status
+      boms: bomsForDraft,
+    };
+
+    const res = await createOrder(payload);
+    if (res?.success) {
+      alert("Draft saved successfully.");
+      // Optionally clear the form or keep it – we keep it so user can continue editing.
+      // The draft can be viewed in the pickup list.
+    } else {
+      alert("Failed to save draft.");
+    }
   };
 
+  // Create final requisition → API call with order_status = 1
   const handleCreateRequisition = async () => {
     const selectedProject = projects.find((p) => p.id === projectId);
     const bomsForSubmit = enrichedBoms
@@ -881,50 +841,36 @@ const handleSwapBomItem = (bomId, itemId, newProductId) => {
           })),
       }))
       .filter((bom) => bom.items.length > 0);
+
+    if (bomsForSubmit.length === 0) {
+      alert("Please mark at least one item to create requisition.");
+      return;
+    }
+
     const payload = {
       project_id: projectId ? Number(projectId) : 1,
       requisition_date: requisitionDate,
       requisition_no: requisitionNo || undefined,
       remarks: remarks.length > 0 ? remarks : undefined,
-      order_status: 1,
+      order_status: 1,   // Final / submitted
       boms: bomsForSubmit,
     };
+
     const res = await createOrder(payload);
     if (res?.success) {
-      dispatch(appendOrder({
-        id: String(res.data?.id || Date.now()),
-        requisition_date: payload.requisition_date,
-        project_id: payload.project_id,
-        project_name: selectedProject?.project_name || "",
-        status: "1",
-        created_at: new Date().toISOString().replace("T", " ").slice(0, 19),
-        boms: bomsForSubmit.map((bom) => ({
-          bom_id: bom.bom_id,
-          items: bom.items,
-        })),
-      }));
-      dispatch(clearDraftOrder());
+      alert("Requisition created successfully.");
       navigate(`/orders/${res.data?.id || ""}`);
+    } else {
+      alert("Failed to create requisition.");
     }
   };
 
-  // JSX (unchanged)
   return (
     <div className="flex flex-col h-full overflow-hidden bg-white">
       <div className="flex-1 overflow-y-auto">
         {/* Header fields */}
         <div className="px-4 sm:px-6 pt-5 pb-4 border-b border-gray-200">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-8 gap-y-4">
-            {/* <div>
-              <p className="text-xs text-gray-400 mb-0.5">Requisition No</p>
-              <input
-                type="text"
-                value={requisitionNo}
-                onChange={(e) => setRequisitionNo(e.target.value)}
-                placeholder="REQ-2026-0001"
-                className="text-sm text-gray-800 bg-transparent focus:outline-none w-full placeholder-gray-300 border-b border-transparent focus:border-[#017e84] hover:border-gray-300 transition-colors pb-0.5"
-              />
-            </div> */}
             <div>
               <p className="text-xs text-gray-400 mb-0.5">Requisition Date *</p>
               <input
@@ -1013,16 +959,15 @@ const handleSwapBomItem = (bomId, itemId, newProductId) => {
             >
               {saving ? "Creating…" : "Create Requisition"}
             </button>
-            {draftOrder && (
-              <button
-                type="button"
-                onClick={() => navigate("/requisitions/pickup")}
-                className="w-full sm:w-auto px-5 py-2 font-semibold text-sm rounded transition-colors border border-[#017e84] text-[#017e84] hover:bg-[#f0fafa]"
-                title="View your current draft pickup list"
-              >
-                View Draft
-              </button>
-            )}
+            {/* View Draft button always visible – navigates to the pickup list page */}
+            {/* <button
+              type="button"
+              onClick={() => navigate("/requisitions/pickup")}
+              className="w-full sm:w-auto px-5 py-2 font-semibold text-sm rounded transition-colors border border-[#017e84] text-[#017e84] hover:bg-[#f0fafa]"
+              title="View your saved drafts and pickup lists"
+            >
+              View Draft
+            </button> */}
           </div>
         </div>
 
@@ -1030,15 +975,6 @@ const handleSwapBomItem = (bomId, itemId, newProductId) => {
         <div className="px-4 sm:px-6 pt-4 pb-8">
           <div className="flex items-center justify-between mb-3">
             <p className="text-base font-semibold text-gray-800">Overview</p>
-            <div className="flex items-center gap-4">
-              {/* <div className="flex items-center gap-2 text-xs text-gray-500">
-                <span>Show raw materials</span>
-                <button type="button" onClick={() => setShowRawMaterials((p) => !p)}
-                  className={`relative inline-flex w-9 h-5 rounded-full transition-colors ${showRawMaterials ? "bg-[#017e84]" : "bg-gray-200"}`}>
-                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${showRawMaterials ? "translate-x-4" : "translate-x-0.5"}`} />
-                </button>
-              </div> */}
-            </div>
           </div>
 
           <div className="border border-gray-200 rounded overflow-visible">

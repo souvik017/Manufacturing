@@ -1,28 +1,42 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-
-const STORAGE_KEY = "uomCategories";
-
-const generateId = () =>
-  `uom_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+import { useState, useEffect } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import useUomCategory from "../../hooks/useUomCategory";
 
 export default function UomCategoryForm() {
   const navigate = useNavigate();
-  const [name, setName] = useState("");
+  const { id } = useParams();
+  const { createUomCategory, updateUomCategory, getUomCategories, loading } = useUomCategory();
+  const [uomName, setUomName] = useState("");
+  const [isEditMode, setIsEditMode] = useState(false);
 
-  const handleSubmit = (e) => {
+  useEffect(() => {
+    if (id) {
+      setIsEditMode(true);
+      const fetchSingle = async () => {
+        const res = await getUomCategories({ page: 1, limit: 100 });
+        if (res.success) {
+          const found = res.data.find((item) => item.id === id);
+          if (found) setUomName(found.uom_name);
+        }
+      };
+      fetchSingle();
+    }
+  }, [id]);
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!uomName.trim()) return;
 
-    const newUom = { id: generateId(), name: name.trim() };
+    let result;
+    if (isEditMode) {
+      result = await updateUomCategory(id, { uom_name: uomName.trim() });
+    } else {
+      result = await createUomCategory({ uom_name: uomName.trim() });
+    }
 
-    const stored = localStorage.getItem(STORAGE_KEY);
-    const uoms = stored ? JSON.parse(stored) : [];
-
-    uoms.push(newUom);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(uoms));
-
-    navigate("/masters/uom-categories");
+    if (result.success) {
+      navigate("/masters/uomcategories");
+    }
   };
 
   const inputClass =
@@ -31,52 +45,45 @@ export default function UomCategoryForm() {
   return (
     <div className="p-4 sm:p-6 bg-gray-50 min-h-screen">
       <div className="max-w-3xl mx-auto bg-white rounded-lg shadow-sm border border-gray-200">
-        
-        {/* Header */}
         <div className="border-b px-6 py-4">
           <h1 className="text-xl font-semibold text-gray-800">
-            Add UOM Category
+            {isEditMode ? "Edit UOM Category" : "Add UOM Category"}
           </h1>
         </div>
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-
-          {/* Grid (future-proof layout) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            
-            {/* UOM Name */}
-            <div className="sm:col-span-2">
+          <div className="grid grid-cols-1 gap-5">
+            <div>
               <label className="block text-sm font-medium text-gray-600 mb-1">
                 UOM Name *
               </label>
               <input
                 type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                value={uomName}
+                onChange={(e) => setUomName(e.target.value)}
                 required
                 placeholder="Enter UOM name"
                 className={inputClass}
+                disabled={loading}
               />
             </div>
-
           </div>
 
-          {/* Buttons */}
           <div className="flex justify-end gap-3 pt-4 border-t">
             <button
               type="button"
-              onClick={() => navigate("/masters/uom-categories")}
+              onClick={() => navigate("/masters/uomcategories")}
               className="px-4 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-100 transition"
+              disabled={loading}
             >
               Cancel
             </button>
-
             <button
               type="submit"
-              className="px-5 py-2 text-sm bg-[#017e84] text-white rounded-md hover:bg-[#01656a] shadow-sm transition"
+              disabled={loading}
+              className="px-5 py-2 text-sm bg-[#017e84] text-white rounded-md hover:bg-[#01656a] shadow-sm transition disabled:opacity-50"
             >
-              Save UOM
+              {loading ? "Saving..." : (isEditMode ? "Update UOM" : "Save UOM")}
             </button>
           </div>
         </form>

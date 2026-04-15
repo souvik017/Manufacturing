@@ -21,7 +21,7 @@ const useOrder = () => {
       if (response.data?.status === true) {
         return {
           success: true,
-          data: response.data,  // pass full response — caller digs into data.data
+          data: response.data,
         };
       }
       throw new Error(response.data?.message || "Failed to fetch orders");
@@ -42,9 +42,9 @@ const useOrder = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await baseClient.post(APIEndpoints.getOrderById, 
-      {requisition_id : requisition_id}
-      );
+      const response = await baseClient.post(APIEndpoints.getOrderById, {
+        requisition_id: requisition_id,
+      });
 
       if (response.data?.status === true) {
         return { success: true, data: response.data.data };
@@ -134,7 +134,15 @@ const useOrder = () => {
     }
   };
 
-  return { getOrders, getOrderById, createOrder, updateOrder, deleteOrder, loading, error };
+  return {
+    getOrders,
+    getOrderById,
+    createOrder,
+    updateOrder,   // ✅ updateOrder is exported
+    deleteOrder,
+    loading,
+    error,
+  };
 };
 
 export default useOrder;

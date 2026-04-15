@@ -15,7 +15,8 @@ deleteProductCategory: "/product/category/delete",
 
   createProduct: "/product/add",
   updateProduct: "/product/update",    
-  deleteProduct: "/product/delete",  
+  deleteProduct: "/product/delete", 
+  bulkUploadProducts:'/product/upload', 
 
   getHsns: "/hsn/list",
   createHsn: "/hsn/add",
@@ -44,6 +45,11 @@ deleteProductCategory: "/product/category/delete",
   getManufactures:'/manufacturer/list',
   createManufacture:'/manufacturer/add',
   updateManufacture:'/manufacturer/update',
-  deleteManufacture:'/manufacturer/delete'
+  deleteManufacture:'/manufacturer/delete',
+
+  getUomCategories:'/uom/list',
+  createUomCategory:'/uom/add',
+  updateUomCategory:'/uom/update',
+  deleteUomCategory:'/uom/delete',
 };
 
