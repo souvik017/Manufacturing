@@ -90,9 +90,9 @@ const useOrder = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await baseClient.put(
-        `${APIEndpoints.updateOrder}/${id}`,
-        payload
+      const response = await baseClient.post(
+        APIEndpoints.updateOrder,
+        {requisition_id: Number(id) , ...payload}
       );
       if (response.data?.status === true) {
         toast.success(response.data.message || "Order updated");
@@ -134,12 +134,41 @@ const useOrder = () => {
     }
   };
 
+  /* ==========================
+     GET REQUISITION PRODUCTS (reqProduct)
+     Fetches items for a given BOM inside a requisition.
+     Used in OrderEditPage to populate BOM items.
+  ========================== */
+  const reqProduct = async ({ bom_id, requisition_id }) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await baseClient.post(APIEndpoints.reqProduct, {
+        bom_id,
+        requisition_id,
+      });
+
+      if (response.data?.status === true) {
+        return { success: true, data: response.data.data };
+      }
+      throw new Error(response.data?.message || "Failed to fetch requisition products");
+    } catch (err) {
+      const errMsg = err?.response?.data?.message || err.message || "Failed to fetch requisition products";
+      setError(errMsg);
+      toast.error(errMsg);
+      return { success: false };
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return {
     getOrders,
     getOrderById,
     createOrder,
-    updateOrder,   // ✅ updateOrder is exported
+    updateOrder,
     deleteOrder,
+    reqProduct,          // ✅ newly added function
     loading,
     error,
   };

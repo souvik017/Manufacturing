@@ -31,6 +31,7 @@ import UserProfile from "./pages/userProfile";
 import Login from "./pages/Login";
 import PublicRoute from "./components/publicRoute";
 import ProtectedRoute from "./components/protectedRoute";
+import OrderEditPage from "./pages/OrderEditPage";
 
 
 export default function App() {
@@ -60,7 +61,7 @@ export default function App() {
         <Route path="requisitions" element={<OrdersLayout />}>
           <Route index element={<OrdersPage />} />
           <Route path="add" element={<OrderAddPage />} />
-          <Route path="draft/edit/:id" element={<OrderAddPage />} />
+          <Route path="draft/edit/:id" element={<OrderEditPage />} />
           <Route path=":orderId" element={<OrderDetailPage />} />
           <Route path=":orderId/bom/:bumId" element={<BumDetailPage />} />
           <Route path="pickup" element={<PickupListPage />} />

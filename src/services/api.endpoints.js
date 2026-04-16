@@ -31,6 +31,8 @@ deleteProductCategory: "/product/category/delete",
   getOrders:"/mrn/list",
   createOrder:"/mrn/create",
   getOrderById:"/mrn/view",
+  reqProduct: "/product/reqproduct",
+  updateOrder:'/mrn/update',
 
   getPartners:"/partner/list",
   deletePartner:'/partner/delete',

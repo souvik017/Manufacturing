@@ -573,7 +573,7 @@ export default function OrderEditPage() {
   const bomsCacheRef = useRef(new Map());
   const fetchedBomIdsRef = useRef(new Set());
 
-  useEffect(() => {
+ useEffect(() => {
     dispatch(clearDraftOrder());
     bomsCacheRef.current.clear();
     fetchedBomIdsRef.current.clear();
@@ -767,29 +767,22 @@ export default function OrderEditPage() {
             fetchedBomIdsRef.current.add(String(bomId));
 
             const bomMeta = bomList.find((b) => b.bom_id === bomId) || {};
-            
-            // ✅ FIX: Process is_selected immediately
             let items = [];
+
             if (res?.success && Array.isArray(res.data)) {
-              items = res.data.map((item, idx) => {
-                let pickNos = Number(item.pick_qty) || 0;
-                // If the backend sends is_selected but pick_qty is missing/zero, use neededQty
-                if (item.is_selected && pickNos === 0) {
-                  pickNos = Number(item.req_qty) || Number(item.bom_qty) || 0;
-                }
-                return {
-                  id: `${bomId}_${item.product_id || idx}`,
-                  productId: item.product_id,
-                  product_id: item.product_id,
-                  name: item.product_name || "",
-                  sub: "",
-                  usualQty: Number(item.bom_qty) || 0,
-                  neededQty: Number(item.req_qty) || Number(item.bom_qty) || 0,
-                  pickNos,
-                  delivered: false,
-                  status: "original",
-                };
-              });
+              items = res.data.map((item, idx) => ({
+                id: `${bomId}_${item.product_id || idx}`,
+                productId: item.product_id,
+                product_id: item.product_id,
+                name: item.product_name || "",
+                sub: "",
+                usualQty: Number(item.bom_qty) || 0,
+                neededQty: Number(item.req_qty) || Number(item.bom_qty) || 0,
+                pickNos: Number(item.pick_qty) || 0,
+                delivered: false,
+                status: item.is_selected ? "original" : "original",
+                _isSelected: Boolean(item.is_selected),
+              }));
             }
 
             const enriched = {
@@ -820,7 +813,7 @@ export default function OrderEditPage() {
     };
 
     fetchNewBoms();
-  }, [selectedBomIds, requisitionId, bomList]);
+  }, [selectedBomIds, requisitionId, bomList, ]);
 
   // Update metadata when bomList arrives later
   useEffect(() => {
@@ -833,6 +826,25 @@ export default function OrderEditPage() {
       })
     );
   }, [bomList]);
+
+  // Apply _isSelected flag (initial marking)
+  useEffect(() => {
+    setEnrichedBoms((prev) =>
+      prev.map((bom) => ({
+        ...bom,
+        items: bom.items.map((item) => {
+          if (item._isSelected !== undefined) {
+            return {
+              ...item,
+              pickNos: item._isSelected && item.pickNos === 0 ? item.neededQty : item.pickNos,
+              _isSelected: undefined,
+            };
+          }
+          return item;
+        }),
+      }))
+    );
+  }, [enrichedBoms.length]);
 
   // Keep cache in sync and sync changes to Redux
   useEffect(() => {
