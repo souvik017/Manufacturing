@@ -10,13 +10,32 @@ const useOrder = () => {
   /* ==========================
      GET ALL ORDERS
   ========================== */
-  const getOrders = async ({ page = 1, limit = 10, requisition_no = "" } = {}) => {
+const getOrders = async ({ page = 1, limit = 15, status, search } = {}) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await baseClient.get(APIEndpoints.getOrders, {
-        data: { page, limit, requisition_no },
-      });
+      // Build payload with only defined values
+      let payload = {};
+      
+      // If search is provided, only send search parameter
+      if (search && search.trim() !== "") {
+        payload = {
+          search: search
+        };
+      } else {
+        // Only send page and limit when no search
+        payload = {
+          page,
+          limit,
+        };
+        
+        // Add status if provided (for draft filter)
+        if (status !== undefined && status !== null && status !== "") {
+          payload.status = status;
+        }
+      }
+      
+      const response = await baseClient.post(APIEndpoints.getOrders, payload);
 
       if (response.data?.status === true) {
         return {

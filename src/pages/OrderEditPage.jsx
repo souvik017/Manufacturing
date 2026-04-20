@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
@@ -26,20 +26,27 @@ function BomDropdown({ boms, selectedIds, onChange, bomLoading }) {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  // Normalize selectedIds to strings for consistent comparison
+  const selectedIdSet = new Set(selectedIds.map(id => String(id)));
+
   const filtered = boms.filter(
     (b) =>
       !search.trim() ||
       b.bom_name?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const toggle = (id) =>
-    onChange(
-      selectedIds.includes(id)
-        ? selectedIds.filter((s) => s !== id)
-        : [...selectedIds, id]
-    );
+  const toggle = (id) => {
+    const idStr = String(id);
+    if (selectedIdSet.has(idStr)) {
+      onChange(selectedIds.filter((s) => String(s) !== idStr));
+    } else {
+      onChange([...selectedIds, id]);
+    }
+  };
 
-  const selectedBoms = boms.filter((b) => selectedIds.includes(b.bom_id));
+  const isSelected = (id) => selectedIdSet.has(String(id));
+
+  const selectedBoms = boms.filter((b) => isSelected(b.bom_id));
 
   return (
     <div ref={ref} className="relative">
@@ -115,7 +122,7 @@ function BomDropdown({ boms, selectedIds, onChange, bomLoading }) {
               </p>
             ) : (
               filtered.map((bom) => {
-                const isSel = selectedIds.includes(bom.bom_id);
+                const isSel = isSelected(bom.bom_id);
                 const itemCount = bom.items?.length || 0;
                 return (
                   <button
@@ -159,7 +166,6 @@ function BomDropdown({ boms, selectedIds, onChange, bomLoading }) {
     </div>
   );
 }
-
 // ─── Item Row ─────────────────────────────────────────────────────────────────
 function ItemRow({ item, onUpdateItem, onSwap, onCopy, onRemove, productList, productLoading }) {
   const [localNeeded, setLocalNeeded] = useState(String(item.neededQty));
@@ -386,6 +392,9 @@ function BomSection({ bom, onItemUpdate, onSwapItem, onCopyItem, onRemoveItem, o
   const items = bom.items || [];
   const countMarked = items.filter((i) => i.pickNos > 0).length;
 
+  // At the top of BomSection component
+console.log("BomSection received bom:", bom.bom_id, bom.bom_name);
+
   useEffect(() => {
     const handler = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
@@ -558,22 +567,27 @@ export default function OrderEditPage() {
   const [projects, setProjects] = useState([]);
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [pageLoading, setPageLoading] = useState(true);
-
   const [loadingBomIds, setLoadingBomIds] = useState(new Set());
-
   const [requisitionNo, setRequisitionNo] = useState("");
   const [requisitionDate, setRequisitionDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [projectId, setProjectId] = useState("");
   const [remarks, setRemarks] = useState([]);
   const [addingRemark, setAddingRemark] = useState(false);
   const [remarkText, setRemarkText] = useState("");
-
   const [enrichedBoms, setEnrichedBoms] = useState([]);
 
   const bomsCacheRef = useRef(new Map());
   const fetchedBomIdsRef = useRef(new Set());
 
- useEffect(() => {
+  // ── KEY FIX: always compare bom_id as String since API returns "5" not 5 ──
+  const getBomMeta = (bomId) =>
+    bomList.find((b) => String(b.bom_id) === String(bomId));
+
+  const getBomName = (bomId) =>
+    getBomMeta(bomId)?.bom_name || `BOM #${bomId}`;
+
+  // ── Reset on requisitionId change ──────────────────────────────────────────
+  useEffect(() => {
     dispatch(clearDraftOrder());
     bomsCacheRef.current.clear();
     fetchedBomIdsRef.current.clear();
@@ -586,15 +600,15 @@ export default function OrderEditPage() {
     setRemarks([]);
   }, [requisitionId, dispatch]);
 
-  // Helper: sync local enrichedBoms changes to Redux (persist all marked items)
-  const syncToRedux = (updatedEnrichedBoms) => {
-    const bomsForRedux = updatedEnrichedBoms.map(bom => ({
+  // ── Sync enrichedBoms → Redux ──────────────────────────────────────────────
+  const syncToRedux = useCallback((updatedEnrichedBoms) => {
+    const bomsForRedux = updatedEnrichedBoms.map((bom) => ({
       bom_id: bom.bom_id,
       bom_name: bom.bom_name,
       product_name: bom.product_name,
       uom_name: bom.uom_name,
       status: bom.status,
-      items: bom.items.map(item => ({
+      items: bom.items.map((item) => ({
         product_id: item.product_id || item.productId,
         product_name: item.name,
         article_no: item.sub,
@@ -606,68 +620,58 @@ export default function OrderEditPage() {
       })),
     }));
 
-    dispatch(updateDraftOrder({
-      requisition_id: Number(requisitionId),
-      requisition_no: requisitionNo,
-      requisition_date: requisitionDate,
-      project_id: projectId ? Number(projectId) : null,
-      project_name: projects.find(p => p.id === Number(projectId))?.project_name || "",
-      remarks,
-      boms: bomsForRedux,
-    }));
-  };
+    dispatch(
+      updateDraftOrder({
+        requisition_id: Number(requisitionId),
+        requisition_no: requisitionNo,
+        requisition_date: requisitionDate,
+        project_id: projectId ? Number(projectId) : null,
+        project_name: projects.find((p) => p.id === Number(projectId))?.project_name || "",
+        remarks,
+        boms: bomsForRedux,
+      })
+    );
+  }, [dispatch, requisitionId, requisitionNo, requisitionDate, projectId, projects, remarks]);
 
-  // ── 1. Fetch BOMs, products, projects on mount ──────────────────────────────
+  // ── 1. Fetch BOMs, products, projects on mount ─────────────────────────────
   useEffect(() => {
-    const fetchBoms = async () => {
-      const res = await getBoms();
-      if (res?.success) setBomList(res.data || []);
-    };
-    fetchBoms();
+    getBoms().then((res) => { if (res?.success) setBomList(res.data || []); });
   }, []);
 
   useEffect(() => {
-    const fetchProducts = async () => {
-      const res = await getProducts();
-      if (res?.success) setProductList(res.data || []);
-    };
-    fetchProducts();
+    getProducts().then((res) => { if (res?.success) setProductList(res.data || []); });
   }, []);
 
   useEffect(() => {
-    const fetchProjects = async () => {
-      setProjectsLoading(true);
-      const res = await getProjects();
+    setProjectsLoading(true);
+    getProjects().then((res) => {
       if (res?.success) setProjects(res.data || []);
       setProjectsLoading(false);
-    };
-    fetchProjects();
+    });
   }, []);
 
-  // ── 2. Load existing order data OR restore from draft ──────────────────────
+  // ── 2. Load existing order OR restore from draft ───────────────────────────
   useEffect(() => {
     if (!requisitionId) return;
-
     let isMounted = true;
 
     const loadOrderData = async () => {
       setPageLoading(true);
 
-      // Check if we have a draft for this exact requisition
+      // Restore from draft if available
       if (draftOrder && draftOrder.requisition_id === Number(requisitionId)) {
-        // Restore from draft
         if (isMounted) {
           setRequisitionNo(draftOrder.requisition_no || "");
           setRequisitionDate(draftOrder.requisition_date || new Date().toISOString().split("T")[0]);
           setProjectId(draftOrder.project_id ? String(draftOrder.project_id) : "");
           setRemarks(draftOrder.remarks || []);
-          
-          const restoredBoms = (draftOrder.boms || []).map(draftBom => ({
+
+          const restoredBoms = (draftOrder.boms || []).map((draftBom) => ({
             bom_id: draftBom.bom_id,
-            bom_name: draftBom.bom_name,
+            bom_name: draftBom.bom_name || getBomName(draftBom.bom_id),
             product_name: draftBom.product_name,
             uom_name: draftBom.uom_name,
-            items: (draftBom.items || []).map(item => ({
+            items: (draftBom.items || []).map((item) => ({
               id: `${draftBom.bom_id}_${item.product_id}`,
               productId: item.product_id,
               product_id: item.product_id,
@@ -679,19 +683,19 @@ export default function OrderEditPage() {
               status: item.status,
             })),
           }));
-          
-          setSelectedBomIds(restoredBoms.map(b => b.bom_id));
-          restoredBoms.forEach(bom => {
+
+          restoredBoms.forEach((bom) => {
             bomsCacheRef.current.set(String(bom.bom_id), bom);
             fetchedBomIdsRef.current.add(String(bom.bom_id));
           });
+          setSelectedBomIds(restoredBoms.map((b) => b.bom_id));
           setEnrichedBoms(restoredBoms);
         }
         setPageLoading(false);
         return;
       }
 
-      // No matching draft → fetch from API
+      // Fetch from API
       const res = await getOrderById(requisitionId);
       if (isMounted && res?.success && res.data) {
         const order = res.data;
@@ -699,163 +703,164 @@ export default function OrderEditPage() {
         setRequisitionDate(order.requisition_date?.split("T")[0] || new Date().toISOString().split("T")[0]);
         setProjectId(order.project_id ? String(order.project_id) : "");
         setRemarks(order.remarks || []);
-        const bomIds = (order.boms || []).map((b) => b.bom_id);
-        setSelectedBomIds(bomIds);
 
         const existingMarkedBoms = (order.boms || [])
-          .map(bom => ({
-            bom_id: bom.bom_id,
-            bom_name: bom.bom_name,
-            product_name: bom.product_name,
-            uom_name: bom.uom_name,
-            items: (bom.items || [])
-              .filter(item => item.pick_qty > 0)
-              .map(item => ({
-                product_id: item.product_id,
-                product_name: item.product_name,
-                article_no: item.article_no,
-                uom_name: item.uom_name,
-                qty: item.qty,
-                pick_qty: item.pick_qty,
-                deliver: true,
-                status: item.status,
-              })),
-          }))
-          .filter(bom => bom.items.length > 0);
+          .map((bom) => {
+            const meta = getBomMeta(bom.bom_id);
+            const enriched = {
+              bom_id: bom.bom_id,
+              // ✅ FIX: use bom_name directly from API response, fallback to bomList lookup
+              bom_name: bom.bom_name || meta?.bom_name || `BOM #${bom.bom_id}`,
+              product_name: meta?.product_name || bom.product_name || "",
+              uom_name: meta?.uom_name || bom.uom_name || "",
+              items: (bom.items || [])
+                .filter((item) => item.pick_qty > 0)
+                .map((item) => ({
+                  id: `${bom.bom_id}_${item.product_id}`,
+                  productId: item.product_id,
+                  product_id: item.product_id,
+                  name: item.product_name,
+                  sub: item.article_no || "",
+                  usualQty: item.qty,
+                  neededQty: item.qty,
+                  pickNos: item.pick_qty,
+                  uom_name: item.uom_name || "",
+                  delivered: true,
+                  status: item.status || "original",
+                })),
+            };
+            return enriched;
+          })
+          .filter((bom) => bom.items.length > 0);
 
-        dispatch(updateDraftOrder({
-          requisition_id: Number(requisitionId),
-          requisition_no: order.requisition_no,
-          requisition_date: order.requisition_date?.split("T")[0],
-          project_id: order.project_id,
-          project_name: order.project_name,
-          remarks: order.remarks,
-          boms: existingMarkedBoms,
-        }));
+        // ✅ Cache immediately so fetchNewBoms doesn't re-fetch and overwrite
+        existingMarkedBoms.forEach((bom) => {
+          bomsCacheRef.current.set(String(bom.bom_id), bom);
+          fetchedBomIdsRef.current.add(String(bom.bom_id));
+        });
+
+        setSelectedBomIds(existingMarkedBoms.map((b) => b.bom_id));
+        setEnrichedBoms(existingMarkedBoms);
+
+        dispatch(
+          updateDraftOrder({
+            requisition_id: Number(requisitionId),
+            requisition_no: order.requisition_no,
+            requisition_date: order.requisition_date?.split("T")[0],
+            project_id: order.project_id,
+            project_name: order.project_name,
+            remarks: order.remarks,
+            boms: existingMarkedBoms,
+          })
+        );
       }
       if (isMounted) setPageLoading(false);
     };
 
     loadOrderData();
-
     return () => { isMounted = false; };
-  }, [requisitionId]);
+  }, [requisitionId, bomList]);
 
-  // ── 3. When selectedBomIds changes, fetch items via reqProduct for new BOMs ─
-  useEffect(() => {
-    if (!requisitionId) return;
+// Replace the existing useEffect for fetching BOM items with this:
 
-    const fetchNewBoms = async () => {
-      const newBomIds = selectedBomIds.filter(
-        (id) => !fetchedBomIdsRef.current.has(String(id)) && !bomsCacheRef.current.has(String(id))
-      );
+// ── 3. Fetch items for ALL selected BOMs (always fresh) ─────────────────────────────────
+useEffect(() => {
+  if (!requisitionId || selectedBomIds.length === 0) return;
 
-      if (newBomIds.length === 0) {
-        const newEnriched = selectedBomIds
-          .map((id) => bomsCacheRef.current.get(String(id)))
-          .filter(Boolean);
-        setEnrichedBoms(newEnriched);
-        return;
-      }
+  const fetchAllBomsFresh = async () => {
+    // Clear existing cache for these BOMs to force fresh fetch
+    const bomIdsToFetch = selectedBomIds;
+    
+    setLoadingBomIds(new Set(bomIdsToFetch));
 
-      setLoadingBomIds((prev) => new Set([...prev, ...newBomIds]));
-
-      await Promise.all(
-        newBomIds.map(async (bomId) => {
-          try {
-            const res = await reqProduct({ bom_id: bomId, requisition_id: Number(requisitionId) });
-            fetchedBomIdsRef.current.add(String(bomId));
-
-            const bomMeta = bomList.find((b) => b.bom_id === bomId) || {};
-            let items = [];
-
-            if (res?.success && Array.isArray(res.data)) {
-              items = res.data.map((item, idx) => ({
+    await Promise.all(
+      bomIdsToFetch.map(async (bomId) => {
+        try {
+          const res = await reqProduct({ 
+            bom_id: bomId, 
+            requisition_id: Number(requisitionId) 
+          });
+          
+          // Always update cache with fresh data
+          const meta = getBomMeta(bomId);
+          const items = res?.success && Array.isArray(res.data)
+            ? res.data.map((item, idx) => ({
                 id: `${bomId}_${item.product_id || idx}`,
                 productId: item.product_id,
                 product_id: item.product_id,
                 name: item.product_name || "",
-                sub: "",
+                sub: item.article_no || "",
+                uom_name: item.uom_name || "",
                 usualQty: Number(item.bom_qty) || 0,
                 neededQty: Number(item.req_qty) || Number(item.bom_qty) || 0,
                 pickNos: Number(item.pick_qty) || 0,
                 delivered: false,
-                status: item.is_selected ? "original" : "original",
+                status: "original",
                 _isSelected: Boolean(item.is_selected),
-              }));
-            }
+              }))
+            : [];
 
-            const enriched = {
-              ...bomMeta,
-              bom_id: bomId,
-              items,
-            };
-            bomsCacheRef.current.set(String(bomId), enriched);
-          } catch (err) {
-            console.error(`Failed to fetch items for BOM ${bomId}:`, err);
-            const bomMeta = bomList.find((b) => b.bom_id === bomId) || {};
-            bomsCacheRef.current.set(String(bomId), { ...bomMeta, bom_id: bomId, items: [] });
-            fetchedBomIdsRef.current.add(String(bomId));
-          }
-        })
-      );
+          const enriched = {
+            bom_id: bomId,
+            bom_name: meta?.bom_name || `BOM #${bomId}`,
+            product_name: meta?.product_name || "",
+            uom_name: meta?.uom_name || "",
+            items,
+          };
 
-      setLoadingBomIds((prev) => {
-        const next = new Set(prev);
-        newBomIds.forEach((id) => next.delete(id));
-        return next;
-      });
-
-      const newEnriched = selectedBomIds
-        .map((id) => bomsCacheRef.current.get(String(id)))
-        .filter(Boolean);
-      setEnrichedBoms(newEnriched);
-    };
-
-    fetchNewBoms();
-  }, [selectedBomIds, requisitionId, bomList, ]);
-
-  // Update metadata when bomList arrives later
-  useEffect(() => {
-    if (bomList.length === 0) return;
-    setEnrichedBoms((prev) =>
-      prev.map((bom) => {
-        const freshMeta = bomList.find((b) => b.bom_id === bom.bom_id);
-        if (freshMeta) return { ...bom, ...freshMeta };
-        return bom;
+          bomsCacheRef.current.set(String(bomId), enriched);
+          fetchedBomIdsRef.current.add(String(bomId));
+        } catch (err) {
+          console.error(`Failed to fetch items for BOM ${bomId}:`, err);
+          const meta = getBomMeta(bomId);
+          bomsCacheRef.current.set(String(bomId), {
+            bom_id: bomId,
+            bom_name: meta?.bom_name || `BOM #${bomId}`,
+            product_name: meta?.product_name || "",
+            uom_name: meta?.uom_name || "",
+            items: [],
+          });
+          fetchedBomIdsRef.current.add(String(bomId));
+        }
       })
     );
-  }, [bomList]);
 
-  // Apply _isSelected flag (initial marking)
+    setLoadingBomIds(new Set());
+
+    // Update enriched Boms with fresh data
+    setEnrichedBoms(
+      selectedBomIds.map((id) => bomsCacheRef.current.get(String(id))).filter(Boolean)
+    );
+  };
+
+  fetchAllBomsFresh();
+}, [selectedBomIds, requisitionId, bomList]); // Remove the dependency that checks fetchedBomIdsRef
+
+  // ── Apply _isSelected flag on first load ───────────────────────────────────
   useEffect(() => {
     setEnrichedBoms((prev) =>
       prev.map((bom) => ({
         ...bom,
         items: bom.items.map((item) => {
-          if (item._isSelected !== undefined) {
-            return {
-              ...item,
-              pickNos: item._isSelected && item.pickNos === 0 ? item.neededQty : item.pickNos,
-              _isSelected: undefined,
-            };
-          }
-          return item;
+          if (item._isSelected === undefined) return item;
+          return {
+            ...item,
+            pickNos: item._isSelected && item.pickNos === 0 ? item.neededQty : item.pickNos,
+            _isSelected: undefined,
+          };
         }),
       }))
     );
   }, [enrichedBoms.length]);
 
-  // Keep cache in sync and sync changes to Redux
+  // ── Keep cache + Redux in sync ─────────────────────────────────────────────
   useEffect(() => {
-    enrichedBoms.forEach((bom) => {
-      bomsCacheRef.current.set(String(bom.bom_id), bom);
-    });
+    enrichedBoms.forEach((bom) => bomsCacheRef.current.set(String(bom.bom_id), bom));
     syncToRedux(enrichedBoms);
   }, [enrichedBoms, requisitionNo, requisitionDate, projectId, remarks]);
 
-  // ── Handlers ────────────────────────────────────────────────────────────────
-  const handleItemUpdate = (bomId, itemId, updates) => {
+  // ── Handlers ───────────────────────────────────────────────────────────────
+  const handleItemUpdate = (bomId, itemId, updates) =>
     setEnrichedBoms((prev) =>
       prev.map((bom) =>
         bom.bom_id === bomId
@@ -863,9 +868,8 @@ export default function OrderEditPage() {
           : bom
       )
     );
-  };
 
-  const handleRemoveBomItem = (bomId, itemId) => {
+  const handleRemoveBomItem = (bomId, itemId) =>
     setEnrichedBoms((prev) =>
       prev.map((bom) =>
         bom.bom_id === bomId
@@ -873,16 +877,14 @@ export default function OrderEditPage() {
           : bom
       )
     );
-  };
 
   const handleRemoveBom = (bomId) => {
     setEnrichedBoms((prev) => prev.filter((bom) => bom.bom_id !== bomId));
     setSelectedBomIds((prev) => prev.filter((id) => id !== bomId));
     bomsCacheRef.current.delete(String(bomId));
     fetchedBomIdsRef.current.delete(String(bomId));
-    const currentDraft = draftOrder || { boms: [] };
-    const updatedBoms = currentDraft.boms.filter(b => String(b.bom_id) !== String(bomId));
-    dispatch(updateDraftOrder({ ...currentDraft, boms: updatedBoms }));
+    const updatedBoms = (draftOrder?.boms || []).filter((b) => String(b.bom_id) !== String(bomId));
+    dispatch(updateDraftOrder({ ...(draftOrder || {}), boms: updatedBoms }));
   };
 
   const handleSwapBomItem = (bomId, itemId, newProductId) => {
@@ -904,59 +906,59 @@ export default function OrderEditPage() {
     );
   };
 
-  const handleCopyBomItem = (bomId, itemId) => {
+  const handleCopyBomItem = (bomId, itemId) =>
     setEnrichedBoms((prev) =>
       prev.map((bom) => {
         if (bom.bom_id !== bomId) return bom;
         const itemToCopy = bom.items.find((i) => i.id === itemId);
         if (!itemToCopy) return bom;
-        const newItem = {
-          ...itemToCopy,
-          id: `${bomId}_copy_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-          pickNos: 0,
-          delivered: false,
-          status: "added",
+        return {
+          ...bom,
+          items: [
+            ...bom.items,
+            { ...itemToCopy, id: `${bomId}_copy_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, pickNos: 0, delivered: false, status: "added" },
+          ],
         };
-        return { ...bom, items: [...bom.items, newItem] };
       })
     );
-  };
 
-  const handleAddProductToBom = (bomId, product) => {
-    const newItem = {
-      id: `${bomId}_new_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      productId: product.id,
-      product_id: product.id,
-      name: product.product_name,
-      sub: product.article_no || "",
-      usualQty: 1,
-      neededQty: 1,
-      pickNos: 0,
-      delivered: false,
-      status: "added",
-    };
+  const handleAddProductToBom = (bomId, product) =>
     setEnrichedBoms((prev) =>
       prev.map((bom) =>
-        bom.bom_id === bomId ? { ...bom, items: [...bom.items, newItem] } : bom
+        bom.bom_id === bomId
+          ? {
+              ...bom,
+              items: [
+                ...bom.items,
+                {
+                  id: `${bomId}_new_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                  productId: product.id,
+                  product_id: product.id,
+                  name: product.product_name,
+                  sub: product.article_no || "",
+                  usualQty: 1,
+                  neededQty: 1,
+                  pickNos: 0,
+                  delivered: false,
+                  status: "added",
+                },
+              ],
+            }
+          : bom
       )
     );
-  };
 
   const handleAddRemark = () => {
-    if (remarkText.trim()) {
-      const newRemarks = [...remarks, remarkText.trim()];
-      setRemarks(newRemarks);
-      setRemarkText("");
-      setAddingRemark(false);
-      if (draftOrder) {
-        dispatch(updateDraftOrder({ ...draftOrder, remarks: newRemarks }));
-      }
-    }
+    if (!remarkText.trim()) return;
+    const newRemarks = [...remarks, remarkText.trim()];
+    setRemarks(newRemarks);
+    setRemarkText("");
+    setAddingRemark(false);
+    if (draftOrder) dispatch(updateDraftOrder({ ...draftOrder, remarks: newRemarks }));
   };
 
   const buildPayloadFromDraft = (orderStatus) => {
-    const draft = draftOrder || { boms: [] };
-    const bomsPayload = draft.boms
+    const bomsPayload = (draftOrder?.boms || [])
       .map((bom) => ({
         bom_id: bom.bom_id,
         items: (bom.items || [])
@@ -985,36 +987,24 @@ export default function OrderEditPage() {
 
   const handleSaveAsDraft = async () => {
     const payload = buildPayloadFromDraft(0);
-    if (payload.boms.length === 0) {
-      alert("Please mark at least one item to save as draft.");
-      return;
-    }
+    if (payload.boms.length === 0) return alert("Please mark at least one item to save as draft.");
     const res = await updateOrder(requisitionId, payload);
-    if (res?.success) {
-      alert("Draft saved successfully.");
-      dispatch(clearDraftOrder());
-    } else {
-      alert("Failed to save draft.");
-    }
+    if (res?.success) { alert("Draft saved successfully."); dispatch(clearDraftOrder()); }
+    else alert("Failed to save draft.");
   };
 
   const handleUpdateRequisition = async () => {
     const payload = buildPayloadFromDraft(1);
-    if (payload.boms.length === 0) {
-      alert("Please mark at least one item to update requisition.");
-      return;
-    }
+    if (payload.boms.length === 0) return alert("Please mark at least one item to update requisition.");
     const res = await updateOrder(requisitionId, payload);
     if (res?.success) {
       alert("Requisition updated successfully.");
       dispatch(clearDraftOrder());
       navigate(`/orders/${requisitionId}`);
-    } else {
-      alert("Failed to update requisition.");
-    }
+    } else alert("Failed to update requisition.");
   };
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  // ── Render ─────────────────────────────────────────────────────────────────
   if (pageLoading) {
     return (
       <div className="flex items-center justify-center h-full bg-white">
@@ -1030,19 +1020,15 @@ export default function OrderEditPage() {
         <div className="px-4 sm:px-6 pt-4 pb-2 flex items-center gap-3 border-b border-gray-100">
           <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-amber-50 border border-amber-200 text-amber-700 px-2.5 py-1 rounded">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
             </svg>
             Editing
           </span>
           <p className="text-sm font-semibold text-gray-700">
             Requisition {requisitionNo ? `#${requisitionNo}` : `#${requisitionId}`}
           </p>
-          <button
-            type="button"
-            onClick={() => navigate(`/orders/${requisitionId}`)}
-            className="ml-auto text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1"
-          >
+          <button type="button" onClick={() => navigate(`/orders/${requisitionId}`)} className="ml-auto text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1">
             <X size={12} /> Cancel
           </button>
         </div>
@@ -1052,35 +1038,20 @@ export default function OrderEditPage() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-8 gap-y-4">
             <div>
               <p className="text-xs text-gray-400 mb-0.5">Requisition Date *</p>
-              <input
-                type="date"
-                value={requisitionDate}
-                onChange={(e) => setRequisitionDate(e.target.value)}
-                className="text-sm text-gray-800 bg-transparent focus:outline-none w-full border-b border-transparent focus:border-[#017e84] hover:border-gray-300 transition-colors pb-0.5"
-              />
+              <input type="date" value={requisitionDate} onChange={(e) => setRequisitionDate(e.target.value)}
+                className="text-sm text-gray-800 bg-transparent focus:outline-none w-full border-b border-transparent focus:border-[#017e84] hover:border-gray-300 transition-colors pb-0.5" />
             </div>
             <div>
               <p className="text-xs text-gray-400 mb-0.5">Requisition No</p>
-              <input
-                type="text"
-                value={requisitionNo}
-                onChange={(e) => setRequisitionNo(e.target.value)}
-                placeholder="e.g. REQ-001"
-                className="text-sm text-gray-800 bg-transparent focus:outline-none w-full border-b border-transparent focus:border-[#017e84] hover:border-gray-300 transition-colors pb-0.5 placeholder-gray-300"
-              />
+              <input type="text" value={requisitionNo} onChange={(e) => setRequisitionNo(e.target.value)} placeholder="e.g. REQ-001"
+                className="text-sm text-gray-800 bg-transparent focus:outline-none w-full border-b border-transparent focus:border-[#017e84] hover:border-gray-300 transition-colors pb-0.5 placeholder-gray-300" />
             </div>
             <div>
               <p className="text-xs text-gray-400 mb-0.5">Project No</p>
-              <select
-                value={projectId}
-                onChange={(e) => setProjectId(e.target.value)}
-                disabled={projectsLoading}
-                className="text-sm text-gray-800 bg-transparent focus:outline-none w-full border-b border-transparent focus:border-[#017e84] hover:border-gray-300 transition-colors pb-0.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-              >
+              <select value={projectId} onChange={(e) => setProjectId(e.target.value)} disabled={projectsLoading}
+                className="text-sm text-gray-800 bg-transparent focus:outline-none w-full border-b border-transparent focus:border-[#017e84] hover:border-gray-300 transition-colors pb-0.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                 <option value="">{projectsLoading ? "Loading projects…" : "Select project…"}</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>{p.project_name}  {p.partner_name}</option>
-                ))}
+                {projects.map((p) => <option key={p.id} value={p.id}>{p.project_name} {p.partner_name}</option>)}
               </select>
             </div>
           </div>
@@ -1098,21 +1069,14 @@ export default function OrderEditPage() {
                 {remarks.map((r, i) => (
                   <div key={i} className="flex items-center gap-1.5 bg-yellow-50 border border-yellow-200 rounded px-2.5 py-1 text-xs text-gray-700">
                     <span>{r}</span>
-                    <button type="button" onClick={() => setRemarks(remarks.filter((_, j) => j !== i))} className="text-gray-300 hover:text-red-400">
-                      <X size={10} />
-                    </button>
+                    <button type="button" onClick={() => setRemarks(remarks.filter((_, j) => j !== i))} className="text-gray-300 hover:text-red-400"><X size={10} /></button>
                   </div>
                 ))}
                 {addingRemark ? (
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <input
-                      autoFocus
-                      value={remarkText}
-                      onChange={(e) => setRemarkText(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && handleAddRemark()}
-                      placeholder="Type remark…"
-                      className="text-xs border border-gray-300 rounded px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-[#017e84] w-44"
-                    />
+                    <input autoFocus value={remarkText} onChange={(e) => setRemarkText(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleAddRemark()} placeholder="Type remark…"
+                      className="text-xs border border-gray-300 rounded px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-[#017e84] w-44" />
                     <button type="button" onClick={handleAddRemark} className="text-xs bg-[#017e84] text-white px-2.5 py-1 rounded hover:bg-[#015f64]">Add</button>
                     <button type="button" onClick={() => { setAddingRemark(false); setRemarkText(""); }} className="text-gray-400 hover:text-gray-600"><X size={13} /></button>
                   </div>
@@ -1126,39 +1090,21 @@ export default function OrderEditPage() {
             <div className="hidden sm:block w-px self-stretch bg-gray-200 flex-shrink-0" />
             <div className="flex-shrink-0 w-full sm:w-[20vw]">
               <p className="text-sm font-semibold text-gray-800 mb-2">Component Group (BOM)</p>
-              <BomDropdown
-                boms={bomList}
-                selectedIds={selectedBomIds}
-                onChange={setSelectedBomIds}
-                bomLoading={bomLoading}
-              />
+              <BomDropdown boms={bomList} selectedIds={selectedBomIds} onChange={setSelectedBomIds} bomLoading={bomLoading} />
             </div>
           </div>
 
-          {/* Action buttons */}
           <div className="flex items-center justify-end gap-3 mt-4 flex-wrap">
-            <button
-              type="button"
-              onClick={() => navigate(`/orders/${requisitionId}`)}
-              className="w-full sm:w-auto px-5 py-2 font-semibold text-sm rounded transition-colors border border-gray-300 text-gray-600 hover:bg-gray-50"
-            >
+            <button type="button" onClick={() => navigate(`/orders/${requisitionId}`)}
+              className="w-full sm:w-auto px-5 py-2 font-semibold text-sm rounded transition-colors border border-gray-300 text-gray-600 hover:bg-gray-50">
               Cancel
             </button>
-            <button
-              type="button"
-              onClick={handleSaveAsDraft}
-              disabled={!isValid || saving}
-              className="w-full sm:w-auto px-5 py-2 font-semibold text-sm rounded transition-colors bg-gray-600 hover:bg-gray-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-            >
+            <button type="button" onClick={handleSaveAsDraft} disabled={!isValid || saving}
+              className="w-full sm:w-auto px-5 py-2 font-semibold text-sm rounded transition-colors bg-gray-600 hover:bg-gray-700 text-white disabled:opacity-50 disabled:cursor-not-allowed">
               {saving ? "Saving…" : "Save as Draft"}
             </button>
-            <button
-              type="button"
-              onClick={handleUpdateRequisition}
-              disabled={!isValid || saving}
-              className={`w-full sm:w-auto px-5 py-2 font-semibold text-sm rounded transition-colors
-                ${isValid && !saving ? "bg-[#017e84] hover:bg-[#015f64] text-white" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}
-            >
+            <button type="button" onClick={handleUpdateRequisition} disabled={!isValid || saving}
+              className={`w-full sm:w-auto px-5 py-2 font-semibold text-sm rounded transition-colors ${isValid && !saving ? "bg-[#017e84] hover:bg-[#015f64] text-white" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}>
               {saving ? "Updating…" : "Update Requisition"}
             </button>
           </div>
@@ -1202,7 +1148,7 @@ export default function OrderEditPage() {
                     enrichedBoms.map((bom) => (
                       <BomSection
                         key={bom.bom_id}
-                        bom={bom}
+                        bom={bom}  // ✅ bom.bom_name is already correct, no override needed
                         loading={loadingBomIds.has(bom.bom_id)}
                         onItemUpdate={(itemId, updates) => handleItemUpdate(bom.bom_id, itemId, updates)}
                         onSwapItem={(itemId, newProductId) => handleSwapBomItem(bom.bom_id, itemId, newProductId)}

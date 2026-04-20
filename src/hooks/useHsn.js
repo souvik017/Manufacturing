@@ -17,7 +17,7 @@ const useHsn = () => {
     setError(null);
 
     try {
-      const response = await baseClient.get(APIEndpoints.getHsns , payload);
+      const response = await baseClient.post(APIEndpoints.getHsns , payload);
 
       if (response.data?.status === true) {
         return {

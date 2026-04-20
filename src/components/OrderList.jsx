@@ -14,22 +14,9 @@ import {
   Loader2,
   ChevronLeft,
   ChevronRight,
+  RefreshCw,
 } from "lucide-react";
 import useOrders from "../hooks/useOrders";
-
-const STATUS_LABEL = {
-  "0": "Draft",
-  "1": "Draft",
-  "2": "In progress",
-  "3": "Complete",
-};
-
-const STATUS_DOT = {
-  "0": "bg-gray-300",
-  "1": "bg-gray-300",
-  "2": "bg-blue-400",
-  "3": "bg-green-400",
-};
 
 export default function OrderList() {
   const navigate = useNavigate();
@@ -40,30 +27,66 @@ export default function OrderList() {
   const [orders, setOrders] = useState([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [openMenuId, setOpenMenuId] = useState(null);
   const [searchFocused, setSearchFocused] = useState(false);
   const [activeFilter, setActiveFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const limit = 15;
+  const [limit, setLimit] = useState(15);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const menuRef = useRef(null);
-  const debounceRef = useRef(null);
   const searchInputRef = useRef(null);
 
   const fetchOrders = useCallback(
-    async (requisition_no = "", page = 1, filter = activeFilter) => {
+    async (searchTerm = "", page = 1, filter = activeFilter, itemsPerPage = limit) => {
       try {
         setIsSearching(true);
-        const params = { requisition_no, page, limit };
-        if (filter === "draft") params.order_status = "0";
+        
+        // Build params object
+        const params = {};
+        
+        // If search term exists, only send search
+        if (searchTerm && searchTerm.trim() !== "") {
+          params.search = searchTerm;
+          console.log("Sending search to backend:", searchTerm);
+        } else {
+          // Only send page, limit, and status when no search
+          params.page = page;
+          params.limit = itemsPerPage;
+          
+          // Add status only for draft filter
+          if (filter === "draft") {
+            params.status = "0";
+          }
+        }
+        
+        console.log("Sending params to API:", params);
+        
         const res = await getOrders(params);
+        
         if (res?.success) {
-          const innerData = res.data.data;
-          setOrders(innerData?.data || []);
-          setTotal(innerData?.total || 0);
-          setTotalPages(Math.ceil((innerData?.total || 0) / limit));
+          const responseData = res.data;
+          // Handle different response structures
+          const ordersData = searchTerm 
+            ? (responseData?.data || responseData?.orders || responseData || [])
+            : (responseData?.data?.data || responseData?.data || []);
+          
+          const totalCount = searchTerm
+            ? (ordersData.length || responseData?.total || 0)
+            : (responseData?.data?.total || responseData?.total || 0);
+          
+          setOrders(ordersData);
+          setTotal(totalCount);
+          
+          // Only calculate total pages when not searching
+          if (!searchTerm) {
+            setTotalPages(Math.ceil(totalCount / itemsPerPage));
+          } else {
+            setTotalPages(1); // Reset pagination when searching
+          }
         } else {
           setOrders([]);
           setTotal(0);
@@ -78,18 +101,34 @@ export default function OrderList() {
         setIsSearching(false);
       }
     },
-    [getOrders, activeFilter, limit]
+    [activeFilter, limit, ]
   );
 
+  // Debounce search term
   useEffect(() => {
-    fetchOrders(search, currentPage, activeFilter);
-  }, [search, currentPage, activeFilter]);
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 500); // 500ms debounce delay
 
-  useEffect(() => {
     return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
+      clearTimeout(timer);
     };
-  }, []);
+  }, [search]);
+
+  // Fetch orders when debounced search changes
+  useEffect(() => {
+    if (debouncedSearch !== undefined) {
+      setCurrentPage(1); // Reset to first page when search changes
+      fetchOrders(debouncedSearch, 1, activeFilter, limit);
+    }
+  }, [debouncedSearch, activeFilter, limit, ]);
+
+  // Refresh function
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    await fetchOrders(search, currentPage, activeFilter, limit);
+    setIsRefreshing(false);
+  }, [search, currentPage, activeFilter, limit, ]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -104,17 +143,14 @@ export default function OrderList() {
   const handleSearchChange = (e) => {
     const val = e.target.value;
     setSearch(val);
-    setCurrentPage(1);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      fetchOrders(val, 1, activeFilter);
-    }, 400);
+    // Don't fetch here, let the debounce effect handle it
   };
 
   const handleClearSearch = () => {
     setSearch("");
+    setDebouncedSearch("");
     setCurrentPage(1);
-    fetchOrders("", 1, activeFilter);
+    fetchOrders("", 1, activeFilter, limit);
     searchInputRef.current?.focus();
   };
 
@@ -122,12 +158,20 @@ export default function OrderList() {
     setActiveFilter(filter);
     setCurrentPage(1);
     setSearch("");
-    fetchOrders("", 1, filter);
+    setDebouncedSearch("");
+    fetchOrders("", 1, filter, limit);
+  };
+
+  const handleLimitChange = (newLimit) => {
+    setLimit(newLimit);
+    setCurrentPage(1);
+    fetchOrders(debouncedSearch, 1, activeFilter, newLimit);
   };
 
   const handlePageChange = (newPage) => {
     if (newPage < 1 || newPage > totalPages) return;
     setCurrentPage(newPage);
+    fetchOrders(debouncedSearch, newPage, activeFilter, limit);
   };
 
   const handleEdit = (e, id) => {
@@ -156,7 +200,6 @@ export default function OrderList() {
   };
 
   const handleOrderClick = (order) => {
-    // Pass the entire order object as state when navigating to draft edit
     if (order.order_status === 0 || order.status === "0") {
       navigate(`/requisitions/draft/edit/${order.id}`, { state: { order } });
     } else {
@@ -209,6 +252,14 @@ export default function OrderList() {
           <Search size={13} className="text-gray-500" />
         </button>
         <div className="flex-1" />
+        <button
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+          title="Refresh"
+          className="w-8 h-8 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50 transition-colors disabled:opacity-50"
+        >
+          <RefreshCw size={13} className={`text-gray-500 ${isRefreshing ? "animate-spin" : ""}`} />
+        </button>
         <button
           onClick={() => navigate("/requisitions/add")}
           title="New order"
@@ -273,7 +324,7 @@ export default function OrderList() {
             placeholder="Search requisition number..."
             className="w-full text-xs text-gray-700 placeholder-gray-400 focus:outline-none bg-transparent font-medium"
           />
-          {isSearching ? (
+          {(isSearching || (search && debouncedSearch !== search)) ? (
             <Loader2 size={14} className="flex-shrink-0 text-[#017e84] animate-spin" />
           ) : search ? (
             <button
@@ -285,24 +336,47 @@ export default function OrderList() {
             </button>
           ) : null}
         </div>
-        {search && !isSearching && (
+        {search && !isSearching && debouncedSearch === search && (
           <div className="mt-1.5 text-[10px] text-gray-500">
             {orders.length > 0
               ? `${orders.length} result${orders.length !== 1 ? "s" : ""} found`
               : "No results found"}
           </div>
         )}
+        {search && search !== debouncedSearch && (
+          <div className="mt-1.5 text-[10px] text-gray-400">
+            Typing...
+          </div>
+        )}
       </div>
 
-      {/* Info row */}
-      <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-gray-100 bg-gray-50">
-        <SlidersHorizontal size={11} className="text-gray-400" />
-        <span className="text-xs text-gray-400">
-          {activeFilter === "draft" ? "Showing drafts only" : "All requisitions"}
-        </span>
-        {!search && total > 0 && (
-          <span className="ml-auto text-xs text-gray-400">{total} total</span>
-        )}
+      {/* Info row with limit dropdown */}
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-100 bg-gray-50">
+        <div className="flex items-center gap-1.5">
+          <SlidersHorizontal size={11} className="text-gray-400" />
+          <span className="text-xs text-gray-400">
+            {activeFilter === "draft" ? "Showing drafts only" : "All requisitions"}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          {!search && total > 0 && (
+            <span className="text-xs text-gray-400">{total} total</span>
+          )}
+          {search && orders.length > 0 && (
+            <span className="text-xs text-gray-400">{orders.length} found</span>
+          )}
+          <select
+            value={limit}
+            onChange={(e) => handleLimitChange(Number(e.target.value))}
+            className="text-xs border border-gray-200 rounded px-1.5 py-0.5 bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-[#017e84]"
+            disabled={!!search}
+          >
+            <option value={15}>15</option>
+            <option value={20}>20</option>
+            <option value={30}>30</option>
+            <option value={50}>50</option>
+          </select>
+        </div>
       </div>
 
       {/* Orders list */}
@@ -348,7 +422,7 @@ export default function OrderList() {
           </div>
         )}
 
-        {!loading && search && orders.length === 0 && (
+        {!loading && search && orders.length === 0 && debouncedSearch === search && (
           <div className="flex flex-col items-center justify-center py-16 gap-3 px-6">
             <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
               <Search size={20} className="text-gray-400" />
@@ -461,8 +535,8 @@ export default function OrderList() {
         })}
       </div>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
+      {/* Pagination - Only show when not searching */}
+      {!search && totalPages > 1 && (
         <div className="border-t border-gray-200 px-2 py-2 bg-white flex items-center justify-between">
           <button
             onClick={() => handlePageChange(currentPage - 1)}

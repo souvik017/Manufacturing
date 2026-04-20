@@ -31,7 +31,7 @@ const useManufacture = () => {
     setError(null);
 
     try {
-      const response = await baseClient.get(APIEndpoints.getManufactures, payload);
+      const response = await baseClient.post(APIEndpoints.getManufactures, payload);
 
       if (response.data?.status === true) {
         const data = response.data.data;

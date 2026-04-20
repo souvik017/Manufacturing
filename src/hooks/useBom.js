@@ -17,8 +17,7 @@ const useBom = () => {
     setError(null);
 
     try {
-      const response = await baseClient.get(APIEndpoints.getBoms, {
-        data: { bom_name },
+      const response = await baseClient.post(APIEndpoints.getBoms, {
         ...payload
       });
 
