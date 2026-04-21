@@ -601,24 +601,24 @@ export default function OrderEditPage() {
   }, [requisitionId, dispatch]);
 
   // ── Sync enrichedBoms → Redux ──────────────────────────────────────────────
-  const syncToRedux = useCallback((updatedEnrichedBoms) => {
-    const bomsForRedux = updatedEnrichedBoms.map((bom) => ({
-      bom_id: bom.bom_id,
-      bom_name: bom.bom_name,
-      product_name: bom.product_name,
-      uom_name: bom.uom_name,
-      status: bom.status,
-      items: bom.items.map((item) => ({
-        product_id: item.product_id || item.productId,
-        product_name: item.name,
-        article_no: item.sub,
-        uom_name: item.uom_name || "",
-        qty: item.neededQty,
-        pick_qty: item.pickNos,
-        deliver: item.pickNos > 0,
-        status: item.status,
-      })),
-    }));
+ const syncToRedux = useCallback((updatedEnrichedBoms) => {
+  const bomsForRedux = updatedEnrichedBoms.map((bom) => ({
+    bom_id: bom.bom_id,
+    bom_name: bom.bom_name,
+    product_name: bom.product_name,
+    uom_name: bom.uom_name,
+    status: bom.status,
+    items: bom.items.map((item) => ({
+      product_id: item.product_id || item.productId,
+      product_name: item.name,           // ✅ was item.product_name
+      article_no: item.sub,              // ✅ was item.article_no
+      uom_name: item.uom_name || "",
+      qty: item.neededQty,               // ✅ was item.qty
+      pick_qty: item.pickNos,            // ✅ was item.pick_qty
+      deliver: item.pickNos > 0,         // ✅ was item.pick_qty > 0
+      status: item.status,
+    })),
+  }));
 
     dispatch(
       updateDraftOrder({
@@ -957,31 +957,31 @@ useEffect(() => {
     if (draftOrder) dispatch(updateDraftOrder({ ...draftOrder, remarks: newRemarks }));
   };
 
-  const buildPayloadFromDraft = (orderStatus) => {
-    const bomsPayload = (draftOrder?.boms || [])
-      .map((bom) => ({
-        bom_id: bom.bom_id,
-        items: (bom.items || [])
-          .filter((item) => item.pick_qty > 0)
-          .map((item) => ({
-            product_id: item.product_id,
-            qty: item.qty,
-            pick_qty: item.pick_qty,
-            deliver: true,
-            item_status: item.status || "original",
-          })),
-      }))
-      .filter((bom) => bom.items.length > 0);
+const buildPayloadFromDraft = (orderStatus) => {
+  const bomsPayload = enrichedBoms
+    .map((bom) => ({
+      bom_id: bom.bom_id,
+      items: bom.items
+        .filter((item) => item.pickNos > 0)  // ✅ use local state field
+        .map((item) => ({
+          product_id: item.product_id || item.productId,
+          qty: item.neededQty,               // ✅ local field
+          pick_qty: item.pickNos,            // ✅ local field
+          deliver: true,
+          item_status: item.status || "original",
+        })),
+    }))
+    .filter((bom) => bom.items.length > 0);
 
-    return {
-      project_id: projectId ? Number(projectId) : 1,
-      requisition_date: requisitionDate,
-      requisition_no: requisitionNo || undefined,
-      remarks: remarks.length > 0 ? remarks : undefined,
-      order_status: orderStatus,
-      boms: bomsPayload,
-    };
+  return {
+    project_id: projectId ? Number(projectId) : 1,
+    requisition_date: requisitionDate,
+    requisition_no: requisitionNo || undefined,
+    remarks: remarks.length > 0 ? remarks : undefined,
+    order_status: orderStatus,
+    boms: bomsPayload,
   };
+};
 
   const isValid = requisitionDate && selectedBomIds.length > 0;
 
