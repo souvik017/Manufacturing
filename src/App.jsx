@@ -32,6 +32,8 @@ import Login from "./pages/Login";
 import PublicRoute from "./components/publicRoute";
 import ProtectedRoute from "./components/protectedRoute";
 import OrderEditPage from "./pages/OrderEditPage";
+import Settings from "./pages/setting";
+import AdminRoute from "./components/AdminRoute";
 
 
 export default function App() {
@@ -101,6 +103,11 @@ export default function App() {
         {/* <Route path="/users/add" element={<AddUser />} /> */}
         {/* <Route path="/users/edit/:id" element={<AddUser />} /> */}
         <Route path="/profile" element={<UserProfile />} />
+        <Route path="/settings" element={
+            <AdminRoute>
+              <Settings />
+            </AdminRoute>
+        } />
 
         <Route path="*" element={<Navigate to="/requisitions/add" replace />} />
       </Route>

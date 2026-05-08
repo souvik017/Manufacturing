@@ -38,20 +38,30 @@ deleteProductCategory: "/product/category/delete",
   deletePartner:'/partner/delete',
   updatePartner:'/partner/update',
   createPartner: '/partner/add',
+  bulkUploadPartners:'/partner/upload',
 
   getProjects:"/project/list",
   createProject:'/project/add',
   updateProject:'/project/update',
   deleteProject:'/project/delete',
+  bulkUploadProjects:'/project/upload',
 
   getManufactures:'/manufacturer/list',
   createManufacture:'/manufacturer/add',
   updateManufacture:'/manufacturer/update',
   deleteManufacture:'/manufacturer/delete',
+  bulkUploadManufactures:'/manufacturer/upload',
 
   getUomCategories:'/uom/list',
   createUomCategory:'/uom/add',
   updateUomCategory:'/uom/update',
   deleteUomCategory:'/uom/delete',
+
+   getUsers: "/auth/list",            // POST - {} returns array of users
+  addUser: "/auth/add",              // POST - { emp_id, user_login_id, password, name, user_type }
+  updateUser: "/auth/update",        // POST - { user_id, user_login_id, name, password, status }
+  updateUserStatus: "/auth/update_status", // POST - { user_id, status }
+  deleteUser: "/auth/delete",        // POST - { user_id }
+  resetPassword: "/auth/reset", 
 };
 

@@ -3,10 +3,12 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, Edit, Trash2, Search, Upload } from "lucide-react";
 import useProduct from "../../hooks/useProduct";
-import Pagination from "../../components/pagination"; // ← capital P
+import Pagination from "../../components/pagination";
+// Import sample CSV content (create this file in src/asset/products_sample.csv)
+import sampleCSVContent from "../../asset/product.csv?raw";
 
 export default function ProductList() {
-  const { getProducts, deleteProduct, bulkUploadProducts, loading } = useProduct(); // ← added bulkUploadProducts
+  const { getProducts, deleteProduct, bulkUploadProducts, loading } = useProduct();
   const [products, setProducts] = useState([]);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -38,17 +40,14 @@ export default function ProductList() {
   const fetchProducts = useCallback(async () => {
     let result;
     if (debouncedSearch.trim() !== "") {
-      // Search mode: no pagination params
       result = await getProducts({ search: debouncedSearch });
     } else {
-      // Normal paginated mode
       result = await getProducts({ limit, page, search: "" });
     }
 
     if (result?.success) {
       setProducts(result.data || []);
       if (debouncedSearch.trim() !== "") {
-        // Search results: no pagination, treat as single page
         setTotalPages(1);
         setTotalRecords(result.data?.length || 0);
       } else if (result.pagination) {
@@ -61,7 +60,6 @@ export default function ProductList() {
     }
   }, [limit, page, debouncedSearch]);
 
-  // Trigger fetch when dependencies change
   useEffect(() => {
     fetchProducts();
   }, [fetchProducts]);
@@ -84,7 +82,7 @@ export default function ProductList() {
     setPage(1);
   };
 
-  // Bulk upload logic using the hook
+  // Bulk upload
   const handleBulkUploadClick = () => {
     fileInputRef.current?.click();
   };
@@ -93,7 +91,6 @@ export default function ProductList() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Basic validation: accept .csv only
     if (!file.name.endsWith(".csv")) {
       alert("Please select a CSV file.");
       e.target.value = "";
@@ -108,7 +105,6 @@ export default function ProductList() {
       const result = await bulkUploadProducts(formData);
       if (result.success) {
         alert(`Bulk upload successful! ${result.importedCount || "Products"} added/updated.`);
-        // Reset search & pagination, refresh list
         setSearch("");
         setDebouncedSearch("");
         setPage(1);
@@ -121,15 +117,28 @@ export default function ProductList() {
       alert("Network error during bulk upload.");
     } finally {
       setBulkUploading(false);
-      e.target.value = ""; // allow re-upload of same file
+      e.target.value = "";
     }
+  };
+
+  // Download sample CSV
+  const handleDownloadSample = () => {
+    const blob = new Blob([sampleCSVContent], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "product_sample.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const isSearchActive = debouncedSearch.trim() !== "";
 
   return (
     <div className="p-6">
-      {/* Header with title and total count */}
+      {/* Header */}
       <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Products</h1>
@@ -171,13 +180,21 @@ export default function ProductList() {
             <span className="text-sm text-gray-600">entries</span>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
             <button
               onClick={handleBulkUploadClick}
               disabled={bulkUploading}
               className="bg-gray-600 text-white px-4 py-2 rounded-md flex items-center gap-2 hover:bg-gray-700 disabled:opacity-50"
             >
               <Upload size={18} /> {bulkUploading ? "Uploading..." : "Bulk Upload"}
+            </button>
+            {/* Download Sample CSV button */}
+            <button
+              onClick={handleDownloadSample}
+              className="text-sm text-[#017e84] hover:underline focus:outline-none"
+              type="button"
+            >
+              Download Sample CSV
             </button>
             <button
               onClick={() => navigate("/masters/products/add")}
@@ -189,7 +206,7 @@ export default function ProductList() {
         </div>
       </div>
 
-      {/* Hidden file input for CSV */}
+      {/* Hidden file input */}
       <input
         type="file"
         ref={fileInputRef}
@@ -198,7 +215,7 @@ export default function ProductList() {
         className="hidden"
       />
 
-      {/* Table */}
+      {/* Table (unchanged) */}
       <div className="overflow-x-auto bg-white rounded shadow">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
@@ -261,7 +278,7 @@ export default function ProductList() {
         </table>
       </div>
 
-      {/* Pagination – hidden during active search */}
+      {/* Pagination */}
       {!loading && totalPages > 1 && !isSearchActive && (
         <Pagination
           currentPage={page}

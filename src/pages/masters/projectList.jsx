@@ -1,9 +1,11 @@
 // pages/masters/ProjectNumberList.jsx
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
-import { Plus, Edit, Trash2, Search, X } from "lucide-react";
+import { Plus, Edit, Trash2, Search, X, Upload } from "lucide-react";
 import useProject from "../../hooks/useProject";
 import Pagination from "../../components/pagination";
+// Import CSV content as raw string (file must exist in src/asset/)
+import sampleCSVContent from "../../asset/project.csv?raw";
 
 const STATUS_LABELS = {
   "1": { label: "Active",   className: "bg-green-100 text-green-700" },
@@ -11,7 +13,7 @@ const STATUS_LABELS = {
 };
 
 export default function ProjectNumberList() {
-  const { getProjects, deleteProject, loading } = useProject();
+  const { getProjects, deleteProject, bulkUploadProjects, loading } = useProject();
   const [projects, setProjects] = useState([]);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -21,17 +23,17 @@ export default function ProjectNumberList() {
   const [totalRecords, setTotalRecords] = useState(0);
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState("");
+  const [bulkUploading, setBulkUploading] = useState(false);
   const debounceTimeoutRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   const fetchProjects = useCallback(async () => {
     try {
       let result;
       
       if (debouncedSearch.trim() !== "") {
-        // Search mode: no pagination params
         result = await getProjects({ search: debouncedSearch });
       } else {
-        // Normal paginated mode
         result = await getProjects({ limit, page, search: "" });
       }
       
@@ -39,7 +41,6 @@ export default function ProjectNumberList() {
         setProjects(result.data || []);
         
         if (debouncedSearch.trim() !== "") {
-          // Search results: no pagination, treat as single page
           setTotalPages(1);
           setTotalRecords(result.data?.length || 0);
         } else if (result.pagination) {
@@ -65,7 +66,6 @@ export default function ProjectNumberList() {
     }
   }, [limit, page, debouncedSearch]);
 
-  // Debounced search handler
   const handleSearchChange = (e) => {
     const val = e.target.value;
     setSearch(val);
@@ -82,7 +82,6 @@ export default function ProjectNumberList() {
     }, 500);
   };
 
-  // Clear search
   const handleClearSearch = () => {
     setSearch("");
     setDebouncedSearch("");
@@ -94,12 +93,10 @@ export default function ProjectNumberList() {
     }
   };
 
-  // Trigger fetch when dependencies change
   useEffect(() => {
     fetchProjects();
   }, [fetchProjects]);
 
-  // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
       if (debounceTimeoutRef.current) {
@@ -128,6 +125,59 @@ export default function ProjectNumberList() {
     setPage(1);
   };
 
+  // Bulk upload handlers
+  const handleBulkUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith(".csv")) {
+      alert("Please select a CSV file.");
+      e.target.value = "";
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    setBulkUploading(true);
+    try {
+      const result = await bulkUploadProjects(formData);
+      if (result.success) {
+        alert(`Bulk upload successful! ${result.importedCount || "Projects"} added/updated.`);
+        // Reset search & pagination, refresh list
+        setSearch("");
+        setDebouncedSearch("");
+        setPage(1);
+        fetchProjects();
+      } else {
+        alert(result.message || "Bulk upload failed. Please check the CSV format.");
+      }
+    } catch (error) {
+      console.error("Bulk upload error:", error);
+      alert("Network error during bulk upload.");
+    } finally {
+      setBulkUploading(false);
+      e.target.value = "";
+    }
+  };
+
+  // Sample CSV download handler using Blob (no network request)
+  const handleDownloadSample = () => {
+    const blob = new Blob([sampleCSVContent], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "project_sample.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const isSearchActive = debouncedSearch.trim() !== "";
 
   return (
@@ -148,7 +198,7 @@ export default function ProjectNumberList() {
           )}
         </div>
 
-        {/* Search & Show entries */}
+        {/* Search & Show entries & Bulk Upload */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="relative w-[20vw] max-w-sm">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
@@ -191,6 +241,23 @@ export default function ProjectNumberList() {
             <span className="text-sm text-gray-600">entries</span>
           </div>
 
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleBulkUploadClick}
+              disabled={bulkUploading}
+              className="bg-gray-600 text-white px-4 py-2 rounded-md flex items-center gap-2 hover:bg-gray-700 disabled:opacity-50"
+            >
+              <Upload size={18} /> {bulkUploading ? "Uploading..." : "Bulk Upload"}
+            </button>
+            <button
+              onClick={handleDownloadSample}
+              className="text-sm text-[#017e84] hover:underline focus:outline-none"
+              type="button"
+            >
+              Download Sample CSV
+            </button>
+          </div>
+
           <Link
             to="/masters/project/add"
             className="bg-[#017e84] text-white px-4 py-2 rounded-md flex items-center gap-2 hover:bg-[#015f64]"
@@ -199,6 +266,15 @@ export default function ProjectNumberList() {
           </Link>
         </div>
       </div>
+
+      {/* Hidden file input */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        accept=".csv"
+        className="hidden"
+      />
 
       {error && (
         <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-md">
@@ -287,7 +363,7 @@ export default function ProjectNumberList() {
         </table>
       </div>
 
-      {/* Pagination - Only show when not searching */}
+      {/* Pagination */}
       {!loading && totalPages > 1 && !isSearchActive && (
         <Pagination
           currentPage={page}

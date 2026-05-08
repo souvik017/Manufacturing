@@ -534,7 +534,7 @@ function BomSection({ bom, onItemUpdate, onSwapItem, onCopyItem, onRemoveItem, o
   );
 }
 
-// ─── Main Page (OrderAddPage) – fully functional, no pickup list ─────────────
+// ─── Main Page (OrderAddPage) ─────────────────────────────────────────────────
 export default function OrderAddPage() {
   const navigate = useNavigate();
   const { getBoms, loading: bomLoading } = useBom();
@@ -551,12 +551,10 @@ export default function OrderAddPage() {
   const [requisitionNo, setRequisitionNo] = useState("");
   const [requisitionDate, setRequisitionDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [projectId, setProjectId] = useState("");
-  const [remarks, setRemarks] = useState([]);
-  const [addingRemark, setAddingRemark] = useState(false);
-  const [remarkText, setRemarkText] = useState("");
+  const [remarks, setRemarks] = useState("");
 
   const [enrichedBoms, setEnrichedBoms] = useState([]);
-  
+
   // Persistent cache for BOM data (preserves pickNos even when deselected)
   const bomsCacheRef = useRef(new Map());
 
@@ -607,7 +605,7 @@ export default function OrderAddPage() {
         ...bom,
         items: (bom.items || []).map((item, idx) => ({
           id: item.product_id || item.item_product_id || `${id}_${idx}`,
-          productId: item.product_id || item.item_product_id ,
+          productId: item.product_id || item.item_product_id,
           product_id: item.product_id || item.item_product_id,
           name: item.product_name || "",
           sub: item.article_no || "",
@@ -723,77 +721,53 @@ export default function OrderAddPage() {
     );
   };
 
-  const handleAddRemark = () => {
-    if (remarkText.trim()) {
-      setRemarks([...remarks, remarkText.trim()]);
-      setRemarkText("");
-      setAddingRemark(false);
-    }
-  };
-
   const isValid = requisitionDate && selectedBomIds.length > 0;
 
-const handleSaveAsDraft = async () => {
-  const bomsForDraft = enrichedBoms
-    .map((bom) => ({
-      bom_id: bom.bom_id,
-      items: bom.items
-        .filter((item) => item.pickNos > 0)
-        .map((item) => ({
-          product_id: item.product_id || item.productId,
-          qty: item.neededQty,
-          pick_qty: item.pickNos,
-          deliver: true,
-          item_status: item.status,
-        })),
-    }))
-    .filter((bom) => bom.items.length > 0);
+  const handleSaveAsDraft = async () => {
+    const bomsForDraft = enrichedBoms
+      .map((bom) => ({
+        bom_id: bom.bom_id,
+        items: bom.items
+          .filter((item) => item.pickNos > 0)
+          .map((item) => ({
+            product_id: item.product_id || item.productId,
+            qty: item.neededQty,
+            pick_qty: item.pickNos,
+            deliver: true,
+            item_status: item.status,
+          })),
+      }))
+      .filter((bom) => bom.items.length > 0);
 
-  // Log the items being sent
-  console.log("BOMs for draft:", bomsForDraft);
-  console.log("Marked items details:", enrichedBoms.flatMap(bom => 
-    bom.items.filter(item => item.pickNos > 0).map(item => ({
-      bom_id: bom.bom_id,
-      bom_name: bom.bom_name,
-      product_name: item.name,
-      product_id: item.product_id || item.productId,
-      neededQty: item.neededQty,
-      pickNos: item.pickNos,
-      status: item.status
-    }))
-  ));
+    if (bomsForDraft.length === 0) {
+      alert("Please mark at least one item to save as draft.");
+      return;
+    }
 
-  if (bomsForDraft.length === 0) {
-    alert("Please mark at least one item to save as draft.");
-    return;
-  }
+    const payload = {
+      project_id: projectId ? Number(projectId) : 1,
+      requisition_date: requisitionDate,
+      requisition_no: requisitionNo || undefined,
+      remarks: remarks.trim() || undefined,
+      order_status: 0,
+      boms: bomsForDraft,
+    };
 
-  const payload = {
-    project_id: projectId ? Number(projectId) : 1,
-    requisition_date: requisitionDate,
-    requisition_no: requisitionNo || undefined,
-    remarks: remarks.length > 0 ? remarks : undefined,
-    order_status: 0,
-    boms: bomsForDraft,
+    const res = await createOrder(payload);
+    if (res?.success) {
+      alert("Draft saved successfully.");
+      bomsCacheRef.current.clear();
+      setSelectedBomIds([]);
+      setEnrichedBoms([]);
+      setRequisitionNo("");
+      setRequisitionDate(new Date().toISOString().split("T")[0]);
+      setProjectId("");
+      setRemarks("");
+      navigate(`/orders/${res.data?.id || ""}`);
+    } else {
+      alert("Failed to save draft.");
+    }
   };
-
-  console.log("Full payload:", payload);
-
-  const res = await createOrder(payload);
-  if (res?.success) {
-    alert("Draft saved successfully.");
-    bomsCacheRef.current.clear();
-    setSelectedBomIds([]);
-    setEnrichedBoms([]);
-    setRequisitionNo("");
-    setRequisitionDate(new Date().toISOString().split("T")[0]);
-    setProjectId("");
-    setRemarks([]);
-    navigate(`/orders/${res.data?.id || ""}`);
-  } else {
-    alert("Failed to save draft.");
-  }
-};
 
   const handleCreateRequisition = async () => {
     const bomsForSubmit = enrichedBoms
@@ -820,7 +794,7 @@ const handleSaveAsDraft = async () => {
       project_id: projectId ? Number(projectId) : 1,
       requisition_date: requisitionDate,
       requisition_no: requisitionNo || undefined,
-      remarks: remarks.length > 0 ? remarks : undefined,
+      remarks: remarks.trim() || undefined,
       order_status: 1,
       boms: bomsForSubmit,
     };
@@ -857,16 +831,6 @@ const handleSaveAsDraft = async () => {
                 className="text-sm text-gray-800 bg-transparent focus:outline-none w-full border-b border-transparent focus:border-[#017e84] hover:border-gray-300 transition-colors pb-0.5"
               />
             </div>
-            {/* <div>
-              <p className="text-xs text-gray-400 mb-0.5">Requisition No</p>
-              <input
-                type="text"
-                value={requisitionNo}
-                onChange={(e) => setRequisitionNo(e.target.value)}
-                placeholder="e.g. REQ-001"
-                className="text-sm text-gray-800 bg-transparent focus:outline-none w-full border-b border-transparent focus:border-[#017e84] hover:border-gray-300 transition-colors pb-0.5 placeholder-gray-300"
-              />
-            </div> */}
             <div>
               <p className="text-xs text-gray-400 mb-0.5">Project No</p>
               <select
@@ -892,30 +856,13 @@ const handleSaveAsDraft = async () => {
           <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-6">
             <div className="flex-1 min-w-0 w-full">
               <p className="text-sm font-semibold text-gray-800 mb-2">Remarks</p>
-              <div className="flex items-center gap-2 flex-wrap">
-                {remarks.map((r, i) => (
-                  <div key={i} className="flex items-center gap-1.5 bg-yellow-50 border border-yellow-200 rounded px-2.5 py-1 text-xs text-gray-700">
-                    <span>{r}</span>
-                    <button type="button" onClick={() => setRemarks(remarks.filter((_, j) => j !== i))} className="text-gray-300 hover:text-red-400">
-                      <X size={10} />
-                    </button>
-                  </div>
-                ))}
-                {addingRemark ? (
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <input autoFocus value={remarkText} onChange={(e) => setRemarkText(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && handleAddRemark()}
-                      placeholder="Type remark…"
-                      className="text-xs border border-gray-300 rounded px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-[#017e84] w-44" />
-                    <button type="button" onClick={handleAddRemark} className="text-xs bg-[#017e84] text-white px-2.5 py-1 rounded hover:bg-[#015f64]">Add</button>
-                    <button type="button" onClick={() => { setAddingRemark(false); setRemarkText(""); }} className="text-gray-400 hover:text-gray-600"><X size={13} /></button>
-                  </div>
-                ) : (
-                  <button type="button" onClick={() => setAddingRemark(true)} className="flex items-center gap-1 text-xs text-[#017e84] hover:underline">
-                    <Plus size={12} /> Add remarks
-                  </button>
-                )}
-              </div>
+              <input
+                type="text"
+                value={remarks}
+                onChange={(e) => setRemarks(e.target.value)}
+                placeholder="Add a remark…"
+                className="w-full text-sm text-gray-800 bg-transparent border-b border-gray-200 focus:border-[#017e84] focus:outline-none pb-0.5 placeholder-gray-300 transition-colors"
+              />
             </div>
             <div className="hidden sm:block w-px self-stretch bg-gray-200 flex-shrink-0" />
             <div className="flex-shrink-0 w-full sm:w-[20vw]">

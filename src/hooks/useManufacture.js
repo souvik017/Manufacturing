@@ -35,7 +35,6 @@ const useManufacture = () => {
 
       if (response.data?.status === true) {
         const data = response.data.data;
-        const pagination = response.data.pagination;
         setManufacturers(data);
         return { success: true, data: data };
       }
@@ -165,6 +164,39 @@ const useManufacture = () => {
     }
   }, []);
 
+  /* ==========================
+     BULK UPLOAD MANUFACTURERS (CSV)
+  ========================== */
+  const bulkUploadManufacturers = useCallback(async (formData) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await baseClient.post(APIEndpoints.bulkUploadManufactures, formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+      if (response.data?.status === true) {
+        toast.success(response.data.message || "Bulk upload successful");
+        // Optionally refresh the list after upload
+        if (response.data.data) {
+          setManufacturers(response.data.data);
+        }
+        return {
+          success: true,
+          importedCount: response.data.importedCount,
+          message: response.data.message,
+        };
+      }
+      throw new Error(response.data?.message || "Bulk upload failed");
+    } catch (err) {
+      const errMsg = handleError(err, "Bulk upload failed");
+      return { success: false, error: errMsg };
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   return {
     // State
     loading,
@@ -177,6 +209,9 @@ const useManufacture = () => {
     createManufacturer,
     updateManufacturer,
     deleteManufacturer,
+    
+    // Bulk upload
+    bulkUploadManufacturers,   // <-- new function
   };
 };
 

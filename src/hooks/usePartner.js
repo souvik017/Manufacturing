@@ -1,3 +1,4 @@
+// hooks/usePartner.js
 import { useState } from "react";
 import { toast } from "react-toastify";
 
@@ -24,12 +25,9 @@ const usePartner = () => {
 
       throw new Error(response.data?.message || "Failed to fetch partners");
     } catch (err) {
-      const errMsg =
-        err?.response?.data?.message || err.message || "Failed to fetch partners";
-
+      const errMsg = err?.response?.data?.message || err.message || "Failed to fetch partners";
       setError(errMsg);
       toast.error(errMsg);
-
       return { success: false };
     } finally {
       setLoading(false);
@@ -53,12 +51,9 @@ const usePartner = () => {
 
       throw new Error(response.data?.message || "Create failed");
     } catch (err) {
-      const errMsg =
-        err?.response?.data?.message || err.message || "Create failed";
-
+      const errMsg = err?.response?.data?.message || err.message || "Create failed";
       setError(errMsg);
       toast.error(errMsg);
-
       return { success: false };
     } finally {
       setLoading(false);
@@ -73,10 +68,7 @@ const usePartner = () => {
     setError(null);
 
     try {
-      const response = await baseClient.post(
-        APIEndpoints.updatePartner ,
-        { ...payload , id }
-      );
+      const response = await baseClient.post(APIEndpoints.updatePartner, { ...payload, id });
 
       if (response.data?.status === true) {
         toast.success(response.data.message || "Partner updated");
@@ -85,12 +77,9 @@ const usePartner = () => {
 
       throw new Error(response.data?.message || "Update failed");
     } catch (err) {
-      const errMsg =
-        err?.response?.data?.message || err.message || "Update failed";
-
+      const errMsg = err?.response?.data?.message || err.message || "Update failed";
       setError(errMsg);
       toast.error(errMsg);
-
       return { success: false };
     } finally {
       setLoading(false);
@@ -105,10 +94,7 @@ const usePartner = () => {
     setError(null);
 
     try {
-      const response = await baseClient.post(
-        APIEndpoints.deletePartner ,
-        { id }
-      );
+      const response = await baseClient.post(APIEndpoints.deletePartner, { id });
 
       if (response.data?.status === true) {
         toast.success(response.data.message || "Partner deleted");
@@ -117,12 +103,40 @@ const usePartner = () => {
 
       throw new Error(response.data?.message || "Delete failed");
     } catch (err) {
-      const errMsg =
-        err?.response?.data?.message || err.message || "Delete failed";
-
+      const errMsg = err?.response?.data?.message || err.message || "Delete failed";
       setError(errMsg);
       toast.error(errMsg);
+      return { success: false };
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  /* ==========================
+     BULK UPLOAD PARTNERS (CSV)
+  ========================== */
+  const bulkUploadPartners = async (formData) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await baseClient.post(APIEndpoints.bulkUploadPartners, formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+      if (response.data?.status === true) {
+        toast.success(response.data.message || "Bulk upload successful");
+        return {
+          success: true,
+          importedCount: response.data.importedCount,
+          message: response.data.message,
+        };
+      }
+      throw new Error(response.data?.message || "Bulk upload failed");
+    } catch (err) {
+      const errMsg = err?.response?.data?.message || err.message || "Bulk upload failed";
+      setError(errMsg);
+      toast.error(errMsg);
       return { success: false };
     } finally {
       setLoading(false);
@@ -134,6 +148,7 @@ const usePartner = () => {
     createPartner,
     updatePartner,
     deletePartner,
+    bulkUploadPartners,   // <-- new function
     loading,
     error,
   };

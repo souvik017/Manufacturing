@@ -1,12 +1,14 @@
 // pages/masters/ManufacturerList.jsx
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
-import { Plus, Edit, Trash2, Search, X } from "lucide-react";
+import { Plus, Edit, Trash2, Search, X, Upload } from "lucide-react";
 import useManufacture from "../../hooks/useManufacture";
 import Pagination from "../../components/pagination";
+// Import CSV content as raw string (file must exist in src/asset/)
+import sampleCSVContent from "../../asset/manufacturer.csv?raw";
 
 export default function ManufacturerList() {
-  const { getManufacturers, deleteManufacturer, loading } = useManufacture();
+  const { getManufacturers, deleteManufacturer, bulkUploadManufacturers, loading } = useManufacture();
   const [manufacturers, setManufacturers] = useState([]);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -16,17 +18,17 @@ export default function ManufacturerList() {
   const [totalRecords, setTotalRecords] = useState(0);
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState("");
+  const [bulkUploading, setBulkUploading] = useState(false);
   const debounceTimeoutRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   const fetchManufacturers = useCallback(async () => {
     try {
       let result;
       
       if (debouncedSearch.trim() !== "") {
-        // Search mode: no pagination params
         result = await getManufacturers({ search: debouncedSearch });
       } else {
-        // Normal paginated mode
         result = await getManufacturers({ limit, page, search: "" });
       }
       
@@ -34,7 +36,6 @@ export default function ManufacturerList() {
         setManufacturers(result.data || []);
         
         if (debouncedSearch.trim() !== "") {
-          // Search results: no pagination, treat as single page
           setTotalPages(1);
           setTotalRecords(result.data?.length || 0);
         } else if (result.pagination) {
@@ -58,9 +59,8 @@ export default function ManufacturerList() {
       setTotalPages(1);
       setError("Failed to load manufacturers");
     }
-  }, [limit, page, debouncedSearch]);
+  }, [limit, page, debouncedSearch, getManufacturers]);
 
-  // Debounced search handler
   const handleSearchChange = (e) => {
     const val = e.target.value;
     setSearch(val);
@@ -77,7 +77,6 @@ export default function ManufacturerList() {
     }, 500);
   };
 
-  // Clear search
   const handleClearSearch = () => {
     setSearch("");
     setDebouncedSearch("");
@@ -89,12 +88,10 @@ export default function ManufacturerList() {
     }
   };
 
-  // Trigger fetch when dependencies change
   useEffect(() => {
     fetchManufacturers();
   }, [fetchManufacturers]);
 
-  // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
       if (debounceTimeoutRef.current) {
@@ -110,7 +107,7 @@ export default function ManufacturerList() {
       if (manufacturers.length === 1 && page > 1 && !debouncedSearch) {
         setPage(page - 1);
       } else {
-        fetchManufacturers(); // refresh current page
+        fetchManufacturers();
       }
     } else {
       setError(result?.message || "Failed to delete manufacturer");
@@ -120,7 +117,59 @@ export default function ManufacturerList() {
   const handleLimitChange = (e) => {
     const newLimit = Number(e.target.value);
     setLimit(newLimit);
-    setPage(1); // reset to first page
+    setPage(1);
+  };
+
+  // Bulk upload handlers
+  const handleBulkUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith(".csv")) {
+      alert("Please select a CSV file.");
+      e.target.value = "";
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    setBulkUploading(true);
+    try {
+      const result = await bulkUploadManufacturers(formData);
+      if (result.success) {
+        alert(`Bulk upload successful! ${result.importedCount || "Manufacturers"} added/updated.`);
+        setSearch("");
+        setDebouncedSearch("");
+        setPage(1);
+        fetchManufacturers();
+      } else {
+        alert(result.message || "Bulk upload failed. Please check the CSV format.");
+      }
+    } catch (error) {
+      console.error("Bulk upload error:", error);
+      alert("Network error during bulk upload.");
+    } finally {
+      setBulkUploading(false);
+      e.target.value = "";
+    }
+  };
+
+  // Sample CSV download handler using Blob (no network request)
+  const handleDownloadSample = () => {
+    const blob = new Blob([sampleCSVContent], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "manufacturer_sample.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const isSearchActive = debouncedSearch.trim() !== "";
@@ -143,7 +192,7 @@ export default function ManufacturerList() {
           )}
         </div>
 
-        {/* Search & Show entries */}
+        {/* Search & Show entries & Bulk Upload */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="relative w-[20vw] max-w-sm">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
@@ -186,6 +235,23 @@ export default function ManufacturerList() {
             <span className="text-sm text-gray-600">entries</span>
           </div>
 
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleBulkUploadClick}
+              disabled={bulkUploading}
+              className="bg-gray-600 text-white px-4 py-2 rounded-md flex items-center gap-2 hover:bg-gray-700 disabled:opacity-50"
+            >
+              <Upload size={18} /> {bulkUploading ? "Uploading..." : "Bulk Upload"}
+            </button>
+            <button
+              onClick={handleDownloadSample}
+              className="text-sm text-[#017e84] hover:underline focus:outline-none"
+              type="button"
+            >
+              Download Sample CSV
+            </button>
+          </div>
+
           <Link
             to="/masters/manufacturers/add"
             className="bg-[#017e84] text-white px-4 py-2 rounded-md flex items-center gap-2 hover:bg-[#015f64]"
@@ -194,6 +260,15 @@ export default function ManufacturerList() {
           </Link>
         </div>
       </div>
+
+      {/* Hidden file input */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        accept=".csv"
+        className="hidden"
+      />
 
       {error && (
         <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-md">
@@ -265,7 +340,7 @@ export default function ManufacturerList() {
         </table>
       </div>
 
-      {/* Pagination - Only show when not searching */}
+      {/* Pagination */}
       {!loading && totalPages > 1 && !isSearchActive && (
         <Pagination
           currentPage={page}

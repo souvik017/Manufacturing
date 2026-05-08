@@ -1,8 +1,10 @@
 // pages/Login.jsx
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { LogIn, Mail, Lock, Factory } from "lucide-react";
+import { LogIn, Mail, Lock } from "lucide-react"; // Factory removed, we'll use logo instead
 import useAuth from "../hooks/useAuth";
+// Import your logo (adjust path and filename as needed)
+import companyLogo from "../assets/logo.png"; // or .svg
 
 export default function Login() {
   const [username, setUsername] = useState("");
@@ -14,21 +16,21 @@ export default function Login() {
     e.preventDefault();
     const result = await loginUser({ username, password });
     if (result.success) {
-      navigate("/requisitions/add"); // or wherever your default page is
+      navigate("/requisitions/add");
     }
   };
 
-  // Use the error from useAuth (or fallback)
   const displayError = apiError;
 
   return (
     <div className="min-h-screen flex">
-      {/* LEFT SIDE - unchanged */}
+      {/* LEFT SIDE - with logo */}
       <div className="hidden md:flex w-1/2 bg-[#1A1745] text-white flex-col justify-between p-10">
         <div>
           <div className="flex items-center gap-3 mb-6">
-            <Factory size={28} />
-            <h1 className="text-2xl font-bold">MACO</h1>
+            {/* Use logo image instead of Factory icon */}
+            <img src={companyLogo} alt="Company Logo" className="h-12 w-auto" />
+            {/* <h1 className="text-2xl font-bold">IMS</h1> */}
           </div>
           <h2 className="text-4xl font-semibold leading-tight">
             Smart Manufacturing
@@ -44,7 +46,7 @@ export default function Login() {
         </div>
       </div>
 
-      {/* RIGHT SIDE - unchanged except logic */}
+      {/* RIGHT SIDE (unchanged) */}
       <div className="flex w-full md:w-1/2 items-center justify-center bg-gray-50 p-6">
         <div className="w-full max-w-md bg-white p-8 rounded-xl shadow-sm border">
           <h2 className="text-2xl font-semibold text-gray-800 mb-1">
@@ -61,7 +63,6 @@ export default function Login() {
           )}
 
           <form onSubmit={handleLogin} className="space-y-4">
-            {/* Username */}
             <div>
               <label className="text-sm text-gray-600">Username</label>
               <div className="relative mt-1">
@@ -77,7 +78,6 @@ export default function Login() {
               </div>
             </div>
 
-            {/* Password */}
             <div>
               <label className="text-sm text-gray-600">Password</label>
               <div className="relative mt-1">
@@ -93,7 +93,6 @@ export default function Login() {
               </div>
             </div>
 
-            {/* Button */}
             <button
               type="submit"
               disabled={loading}

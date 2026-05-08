@@ -627,40 +627,16 @@ useEffect(() => {
         {/* Remarks + BOM selector */}
         <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
           <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-6">
-            <div className="flex-1 min-w-0 w-full">
-              <p className="text-sm font-semibold text-gray-800 mb-2">Remarks</p>
-              <div className="flex items-center gap-2 flex-wrap">
-                {(order.remarks || []).map((r, i) => (
-                  <div key={i} className="flex items-center gap-1.5 bg-yellow-50 border border-yellow-200 rounded px-2.5 py-1 text-xs text-gray-700">
-                    <span>{typeof r === 'string' ? r : r.text}</span>
-                    <button onClick={() => handleRemoveRemark(i)} className="text-gray-300 hover:text-red-400">
-                      <X size={10} />
-                    </button>
-                  </div>
-                ))}
-                {addingRemark && (
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <input
-                      autoFocus
-                      value={remarkText}
-                      onChange={(e) => setRemarkText(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && handleAddRemark()}
-                      placeholder="Type remark…"
-                      className="text-xs border border-gray-300 rounded px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-[#017e84] w-44"
-                    />
-                    <button onClick={handleAddRemark} className="text-xs bg-[#017e84] text-white px-2.5 py-1 rounded hover:bg-[#015f64]">Add</button>
-                    <button onClick={() => { setAddingRemark(false); setRemarkText(""); }} className="text-gray-400 hover:text-gray-600"><X size={13} /></button>
-                  </div>
-                )}
-                {/* // : (
-                //   <button onClick={() => setAddingRemark(true)} className="flex items-center gap-1 text-xs text-[#017e84] hover:underline">
-                //     <Plus size={12} /> Add remark
-                //   </button>
-                // )
-                // } */}
-              </div>
-            </div>
-
+<div className="flex-1 items-center gap-2 flex-wrap">
+  <p>Remarks :</p>
+  {order.remarks ? (
+    <div className="flex items-center gap-1.5 rounded px-2.5 py-1 text-xs text-gray-700">
+      <span>{order.remarks}</span>
+    </div>
+  ) : (
+    <p className="text-xs text-gray-400 italic">No remarks</p>
+  )}
+</div>
             <div className="hidden sm:block w-px self-stretch bg-gray-200 flex-shrink-0" />
 
             <div className="flex-shrink-0 w-full sm:w-[20vw]">

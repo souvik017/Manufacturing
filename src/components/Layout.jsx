@@ -121,8 +121,11 @@ function MasterDropdown({ anchorRef, onMouseEnter, onMouseLeave }) {
 
 function PrimarySidebar({ masterOpen, onMasterEnter, onMasterLeave }) {
   const location = useLocation();
-  const navigate = useNavigate();  // ✅ FIX: added navigate
-  const isMasterRoute = location.pathname.startsWith("/masters");
+  const navigate = useNavigate();
+  const { member } = useSelector((state) => state.auth);
+  const userType = member?.user_type; // 1 = admin, 2 = user
+  const isAdmin = userType === 1;
+
   const masterBtnRef = useRef(null);
 
   return (
@@ -146,7 +149,7 @@ function PrimarySidebar({ masterOpen, onMasterEnter, onMasterLeave }) {
                 onMouseLeave={onMasterLeave}
                 title="Master Data"
                 className={`w-full h-12 flex flex-col items-center justify-center rounded-xl gap-0.5 transition-all relative ${
-                  masterOpen || isMasterRoute
+                  masterOpen || location.pathname.startsWith("/masters")
                     ? "bg-white/25 text-white"
                     : "text-white/70 hover:bg-white/15 hover:text-white"
                 }`}
@@ -155,7 +158,7 @@ function PrimarySidebar({ masterOpen, onMasterEnter, onMasterLeave }) {
                 <span className="text-[8px] font-semibold uppercase tracking-wide leading-none mt-0.5">
                   {item.label}
                 </span>
-                {(masterOpen || isMasterRoute) && (
+                {(masterOpen || location.pathname.startsWith("/masters")) && (
                   <span className="absolute right-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-white rounded-l-full" />
                 )}
               </button>
@@ -190,21 +193,23 @@ function PrimarySidebar({ masterOpen, onMasterEnter, onMasterLeave }) {
 
         <div className="flex-1" />
 
-        <button
-          title="Settings"
-          className="w-9 h-9 flex items-center justify-center rounded-xl text-white/60 hover:bg-white/15 hover:text-white transition-all"
-        >
-          <Settings size={16} />
-        </button>
+        {/* Settings button - shown only for admin (user_type === 1) */}
+        {isAdmin && (
+          <button
+            onClick={() => navigate('/settings')}
+            title="Settings"
+            className="w-9 h-9 flex items-center justify-center rounded-xl text-white/60 hover:bg-white/15 hover:text-white transition-all"
+          >
+            <Settings size={16} />
+          </button>
+        )}
 
-        {/* Profile button - now navigate works */}
+        {/* Profile button - visible for all users */}
         <div
           onClick={() => navigate('/profile')}
           className="w-9 h-9 rounded-full bg-[#e8a825] flex items-center justify-center text-xs font-bold text-white shadow-md mt-1 mb-1 cursor-pointer relative z-10"
         >
-          {/* Show user initials dynamically - we'll pass from parent or use Redux; but for simplicity, we'll rely on Topbar to show full name. */}
-          {/* We'll keep as placeholder; can be improved later */}
-          {window.innerWidth > 0 && "U"} {/* temporary */}
+          {member?.name ? member.name.charAt(0).toUpperCase() : "U"}
         </div>
       </aside>
 
@@ -308,8 +313,6 @@ function Topbar() {
       </div>
 
       <div className="ml-auto flex items-center gap-3">
-
-
         {/* User Avatar & Name */}
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-full bg-[#e8a825] text-white flex items-center justify-center text-xs font-bold shadow">
@@ -326,9 +329,7 @@ function Topbar() {
           className="flex items-center gap-1 text-gray-500 hover:text-red-600 transition-colors"
         >
           <LogOut size={16} />
-          {/* <span className="text-xs font-medium hidden sm:inline">Logout</span> */}
         </button>
-
       </div>
     </header>
   );

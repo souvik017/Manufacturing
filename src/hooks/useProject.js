@@ -1,3 +1,4 @@
+// hooks/useProject.js
 import { useState } from "react";
 import { toast } from "react-toastify";
 
@@ -16,20 +17,19 @@ const useProject = () => {
     setError(null);
 
     try {
-      const response = await baseClient.get(APIEndpoints.getProjects , payload);
+      // Note: original used baseClient.get(APIEndpoints.getProjects, payload)
+      // GET requests usually don't have a body. If payload is query params, adjust accordingly.
+      const response = await baseClient.get(APIEndpoints.getProjects, { params: payload });
 
       if (response.data?.status === true) {
-        return { success: true, data: response.data.data , pagination: response.data.pagination };
+        return { success: true, data: response.data.data, pagination: response.data.pagination };
       }
 
       throw new Error(response.data?.message || "Failed to fetch projects");
     } catch (err) {
-      const errMsg =
-        err?.response?.data?.message || err.message || "Failed to fetch projects";
-
+      const errMsg = err?.response?.data?.message || err.message || "Failed to fetch projects";
       setError(errMsg);
       toast.error(errMsg);
-
       return { success: false };
     } finally {
       setLoading(false);
@@ -53,12 +53,9 @@ const useProject = () => {
 
       throw new Error(response.data?.message || "Create failed");
     } catch (err) {
-      const errMsg =
-        err?.response?.data?.message || err.message || "Create failed";
-
+      const errMsg = err?.response?.data?.message || err.message || "Create failed";
       setError(errMsg);
       toast.error(errMsg);
-
       return { success: false };
     } finally {
       setLoading(false);
@@ -73,10 +70,7 @@ const useProject = () => {
     setError(null);
 
     try {
-      const response = await baseClient.post(
-        APIEndpoints.updateProject,
-        {...payload, id}
-      );
+      const response = await baseClient.post(APIEndpoints.updateProject, { ...payload, id });
 
       if (response.data?.status === true) {
         toast.success(response.data.message || "Project updated");
@@ -85,12 +79,9 @@ const useProject = () => {
 
       throw new Error(response.data?.message || "Update failed");
     } catch (err) {
-      const errMsg =
-        err?.response?.data?.message || err.message || "Update failed";
-
+      const errMsg = err?.response?.data?.message || err.message || "Update failed";
       setError(errMsg);
       toast.error(errMsg);
-
       return { success: false };
     } finally {
       setLoading(false);
@@ -105,10 +96,7 @@ const useProject = () => {
     setError(null);
 
     try {
-      const response = await baseClient.post(
-        APIEndpoints.deleteProject,
-        {id}
-      );
+      const response = await baseClient.post(APIEndpoints.deleteProject, { id });
 
       if (response.data?.status === true) {
         toast.success(response.data.message || "Project deleted");
@@ -117,12 +105,40 @@ const useProject = () => {
 
       throw new Error(response.data?.message || "Delete failed");
     } catch (err) {
-      const errMsg =
-        err?.response?.data?.message || err.message || "Delete failed";
-
+      const errMsg = err?.response?.data?.message || err.message || "Delete failed";
       setError(errMsg);
       toast.error(errMsg);
+      return { success: false };
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  /* ==========================
+     BULK UPLOAD PROJECTS (CSV)
+  ========================== */
+  const bulkUploadProjects = async (formData) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await baseClient.post(APIEndpoints.bulkUploadProjects, formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+      if (response.data?.status === true) {
+        toast.success(response.data.message || "Bulk upload successful");
+        return {
+          success: true,
+          importedCount: response.data.importedCount,
+          message: response.data.message,
+        };
+      }
+      throw new Error(response.data?.message || "Bulk upload failed");
+    } catch (err) {
+      const errMsg = err?.response?.data?.message || err.message || "Bulk upload failed";
+      setError(errMsg);
+      toast.error(errMsg);
       return { success: false };
     } finally {
       setLoading(false);
@@ -134,6 +150,7 @@ const useProject = () => {
     createProject,
     updateProject,
     deleteProject,
+    bulkUploadProjects,   // <-- new function
     loading,
     error,
   };
